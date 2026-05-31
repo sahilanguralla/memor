@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# E2E Tests & Coverage Reports
+.nyc_output
+coverage
+playwright-report
+test-results

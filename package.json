@@ -12,7 +12,9 @@
     "release": "release-it",
     "prepare": "husky",
     "lint": "eslint . --ext .ts,.tsx --fix",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:e2e": "playwright test",
+    "test:e2e:coverage": "VITE_COVERAGE=true playwright test && nyc report --reporter=html --reporter=text --reporter=lcov"
   },
   "config": {
     "commitizen": {
@@ -34,6 +36,7 @@
   "devDependencies": {
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
+    "@playwright/test": "^1.60.0",
     "@release-it/bumper": "^7.0.6",
     "@release-it/conventional-changelog": "^11.0.1",
     "@tauri-apps/cli": "^2",
@@ -55,9 +58,11 @@
     "eslint-plugin-react-hooks": "^4.6.2",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.7",
+    "nyc": "^18.0.0",
     "prettier": "^3.5.2",
     "release-it": "^20.2.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vite-plugin-istanbul": "^9.0.1"
   }
 }
