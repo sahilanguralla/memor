@@ -21,7 +21,7 @@ jobs:
       - name: Check if tag is on main branch
         id: check
         run: |
-          git fetch --all --tags
+          git fetch --all --tags --force
           if git branch -r --contains ${{ github.sha }} | grep -q "origin/main"; then
             echo "is_main=true" >> $GITHUB_OUTPUT
           else
