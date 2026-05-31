@@ -1,0 +1,89 @@
+name: 'Publish Release'
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on tags matching v*, e.g. v1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  check-branch:
+    runs-on: ubuntu-latest
+    outputs:
+      is_main: ${{ steps.check.outputs.is_main }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check if tag is on main branch
+        id: check
+        run: |
+          git fetch --all --tags
+          if git branch -r --contains ${{ github.sha }} | grep -q "origin/main"; then
+            echo "is_main=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_main=false" >> $GITHUB_OUTPUT
+          fi
+
+  publish-tauri:
+    needs: check-branch
+    if: needs.check-branch.outputs.is_main == 'true'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest' # Apple Silicon & Intel
+            args: '--target universal-apple-darwin'
+          - platform: 'ubuntu-22.04' # Ubuntu Linux
+            args: ''
+          - platform: 'windows-latest' # Windows MSI/EXE
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libsoup-3.0-dev \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build and Publish Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Memor ${{ github.ref_name }}'
+          releaseBody: 'See the assets below to download the Memor installer for your platform.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
