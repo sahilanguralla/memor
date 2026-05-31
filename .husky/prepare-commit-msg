@@ -1,3 +1,4 @@
-if tty >/dev/null 2>&1; then
+# Only run Commitizen for interactive commits (where no message source is specified)
+if [ -z "$2" ]; then
   exec < /dev/tty && npx cz --hook || true
 fi

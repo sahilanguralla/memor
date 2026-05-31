@@ -1,12 +1,22 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import istanbul from 'vite-plugin-istanbul';
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react()],
+  plugins: [
+    react(),
+    process.env.VITE_COVERAGE === 'true' &&
+      istanbul({
+        include: 'src/*',
+        exclude: ['node_modules', 'test/*', 'e2e/*'],
+        extension: ['.js', '.ts', '.jsx', '.tsx'],
+        requireEnv: false,
+      }),
+  ].filter((p): p is NonNullable<typeof p> => !!p),
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

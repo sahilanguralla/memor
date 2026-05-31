@@ -90,22 +90,22 @@ pub struct TrashResponse {
 
 pub fn open_encrypted_db<P: AsRef<std::path::Path>>(path: P, password: &str) -> Result<Connection> {
     let conn = Connection::open(path)?;
-    
+
     // SQLCipher requires setting the key using pragma_update
     conn.pragma_update(None, "key", password)?;
-    
+
     // Verify the key by running a test query
     {
         let mut stmt = conn.prepare("SELECT count(*) FROM sqlite_master;")?;
         let _ = stmt.query([])?;
     }
-    
+
     Ok(conn)
 }
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute("PRAGMA foreign_keys = ON;", [])?;
-    
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,7 +115,7 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         );",
         [],
     )?;
-    
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,7 +168,10 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     )?;
 
     // Safe alterations
-    if let Err(e) = conn.execute("ALTER TABLE tasks ADD COLUMN completion_percentage INTEGER DEFAULT 0;", []) {
+    if let Err(e) = conn.execute(
+        "ALTER TABLE tasks ADD COLUMN completion_percentage INTEGER DEFAULT 0;",
+        [],
+    ) {
         eprintln!("Migration completion_percentage warning/error: {:?}", e);
     }
     if let Err(e) = conn.execute("ALTER TABLE tasks ADD COLUMN created_at DATETIME;", []) {
@@ -177,53 +180,75 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     let _ = conn.execute("UPDATE tasks SET created_at = COALESCE(updated_at, CURRENT_TIMESTAMP) WHERE created_at IS NULL;", []);
 
     // Safe alterations for archiving and soft-deletes
-    let has_archived: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('projects') WHERE name='archived');",
-        [],
-        |row| row.get(0),
-    ).unwrap_or(false);
+    let has_archived: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('projects') WHERE name='archived');",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
     if !has_archived {
-        let _ = conn.execute("ALTER TABLE projects ADD COLUMN archived BOOLEAN DEFAULT 0;", []);
+        let _ = conn.execute(
+            "ALTER TABLE projects ADD COLUMN archived BOOLEAN DEFAULT 0;",
+            [],
+        );
     }
 
-    let has_deleted_proj: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('projects') WHERE name='deleted');",
-        [],
-        |row| row.get(0),
-    ).unwrap_or(false);
+    let has_deleted_proj: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('projects') WHERE name='deleted');",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
     if !has_deleted_proj {
-        let _ = conn.execute("ALTER TABLE projects ADD COLUMN deleted BOOLEAN DEFAULT 0;", []);
+        let _ = conn.execute(
+            "ALTER TABLE projects ADD COLUMN deleted BOOLEAN DEFAULT 0;",
+            [],
+        );
     }
 
-    let has_deleted_at_proj: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('projects') WHERE name='deleted_at');",
-        [],
-        |row| row.get(0),
-    ).unwrap_or(false);
+    let has_deleted_at_proj: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('projects') WHERE name='deleted_at');",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
     if !has_deleted_at_proj {
         let _ = conn.execute("ALTER TABLE projects ADD COLUMN deleted_at DATETIME;", []);
     }
 
-    let has_deleted_tasks: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('tasks') WHERE name='deleted');",
-        [],
-        |row| row.get(0),
-    ).unwrap_or(false);
+    let has_deleted_tasks: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('tasks') WHERE name='deleted');",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
     if !has_deleted_tasks {
-        let _ = conn.execute("ALTER TABLE tasks ADD COLUMN deleted BOOLEAN DEFAULT 0;", []);
+        let _ = conn.execute(
+            "ALTER TABLE tasks ADD COLUMN deleted BOOLEAN DEFAULT 0;",
+            [],
+        );
     }
 
-    let has_deleted_at_tasks: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('tasks') WHERE name='deleted_at');",
-        [],
-        |row| row.get(0),
-    ).unwrap_or(false);
+    let has_deleted_at_tasks: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('tasks') WHERE name='deleted_at');",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
     if !has_deleted_at_tasks {
         let _ = conn.execute("ALTER TABLE tasks ADD COLUMN deleted_at DATETIME;", []);
     }
 
     // Perform data migrations
-    let count_priorities: i64 = conn.query_row("SELECT count(*) FROM task_daily_priorities;", [], |row| row.get(0))?;
+    let count_priorities: i64 =
+        conn.query_row("SELECT count(*) FROM task_daily_priorities;", [], |row| {
+            row.get(0)
+        })?;
     if count_priorities == 0 {
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         conn.execute(
@@ -233,7 +258,8 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         )?;
     }
 
-    let count_updates: i64 = conn.query_row("SELECT count(*) FROM task_updates;", [], |row| row.get(0))?;
+    let count_updates: i64 =
+        conn.query_row("SELECT count(*) FROM task_updates;", [], |row| row.get(0))?;
     if count_updates == 0 {
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         conn.execute(
@@ -250,12 +276,17 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         )?;
     }
 
-    let count_runs: i64 = conn.query_row("SELECT count(*) FROM carry_over_runs;", [], |row| row.get(0))?;
+    let count_runs: i64 = conn.query_row("SELECT count(*) FROM carry_over_runs;", [], |row| {
+        row.get(0)
+    })?;
     if count_runs == 0 {
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let _ = conn.execute("INSERT OR IGNORE INTO carry_over_runs (date) VALUES (?);", params![today]);
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO carry_over_runs (date) VALUES (?);",
+            params![today],
+        );
     }
-    
+
     Ok(())
 }
 
@@ -283,7 +314,7 @@ pub fn delete_project(conn: &Connection, id: i64, delete_tasks: bool) -> Result<
         "UPDATE projects SET deleted = 1, deleted_at = ? WHERE id = ?;",
         params![now, id],
     )?;
-    
+
     if delete_tasks {
         conn.execute(
             "UPDATE tasks SET deleted = 1, deleted_at = ? WHERE project_id = ?;",
@@ -306,7 +337,7 @@ pub fn sync_task_with_latest_update(conn: &Connection, task_id: i64) -> Result<(
          FROM task_updates 
          WHERE task_id = ? 
          ORDER BY date DESC, created_at DESC, id DESC 
-         LIMIT 1;"
+         LIMIT 1;",
     )?;
     let mut rows = stmt.query(params![task_id])?;
     if let Some(row) = rows.next()? {
@@ -378,7 +409,7 @@ pub fn update_task_update(
     status: &str,
 ) -> Result<()> {
     let completion_percentage = completion_percentage.clamp(0, 100);
-    
+
     let task_id: i64 = conn.query_row(
         "SELECT task_id FROM task_updates WHERE id = ?;",
         params![id],
@@ -449,7 +480,7 @@ pub fn carry_over_priorities(conn: &Connection, target_date: &str) -> Result<()>
         "SELECT date FROM task_daily_priorities 
          WHERE date < ? 
          ORDER BY date DESC 
-         LIMIT 1;"
+         LIMIT 1;",
     )?;
     let mut rows_prev = stmt_prev.query(params![target_date])?;
     let prev_date = if let Some(row) = rows_prev.next()? {
@@ -482,9 +513,8 @@ pub fn carry_over_priorities(conn: &Connection, target_date: &str) -> Result<()>
                AND COALESCE(tu.completion_percentage, t.completion_percentage, 0) < 100;"
         )?;
 
-        let task_ids_rows = stmt_tasks.query_map(params![p_date, p_date], |row| {
-            row.get::<_, i64>(0)
-        })?;
+        let task_ids_rows =
+            stmt_tasks.query_map(params![p_date, p_date], |row| row.get::<_, i64>(0))?;
 
         let mut carry_over_ids = Vec::new();
         for id_res in task_ids_rows {
@@ -522,9 +552,13 @@ pub fn create_task(
     completion_percentage: Option<i32>,
     date: Option<&str>,
 ) -> Result<i64> {
-    let target_date = date.map(|d| d.to_string()).unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string());
-    let initial_percent = completion_percentage.unwrap_or(if status == "done" { 100 } else { 0 }).clamp(0, 100);
-    
+    let target_date = date
+        .map(|d| d.to_string())
+        .unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string());
+    let initial_percent = completion_percentage
+        .unwrap_or(if status == "done" { 100 } else { 0 })
+        .clamp(0, 100);
+
     let initial_status = if initial_percent >= 100 {
         "done"
     } else if initial_percent <= 0 {
@@ -532,15 +566,17 @@ pub fn create_task(
     } else {
         status
     };
-    
+
     let completed_at = if initial_status == "done" {
         Some(chrono::Local::now().to_rfc3339())
     } else {
         None
     };
     let updated_at = chrono::Local::now().to_rfc3339();
-    let created_at = date.map(|d| format!("{}T12:00:00", d)).unwrap_or_else(|| chrono::Local::now().to_rfc3339());
-    
+    let created_at = date
+        .map(|d| format!("{}T12:00:00", d))
+        .unwrap_or_else(|| chrono::Local::now().to_rfc3339());
+
     conn.execute(
         "INSERT INTO tasks (project_id, title, status, project_priority, is_daily_priority, is_weekly_priority, updated_at, completed_at, completion_percentage, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
@@ -588,8 +624,10 @@ pub fn update_task(
     date: Option<&str>,
     planned_for_next_day: Option<bool>,
 ) -> Result<()> {
-    let target_date = date.map(|d| d.to_string()).unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string());
-    
+    let target_date = date
+        .map(|d| d.to_string())
+        .unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string());
+
     let (curr_status, curr_percent): (String, i32) = conn.query_row(
         "SELECT status, completion_percentage FROM tasks WHERE id = ?;",
         params![id],
@@ -602,7 +640,7 @@ pub fn update_task(
             if status != curr_status {
                 match status {
                     "done" => 100,
-                    _ => curr_percent
+                    _ => curr_percent,
                 }
             } else {
                 curr_percent
@@ -616,7 +654,11 @@ pub fn update_task(
         status
     };
 
-    let final_percent = if new_status == "done" { 100 } else { new_percent };
+    let final_percent = if new_status == "done" {
+        100
+    } else {
+        new_percent
+    };
 
     let completed_at: Option<String> = if new_status == "done" {
         if curr_status == "done" {
@@ -699,12 +741,18 @@ pub fn delete_task(conn: &Connection, id: i64) -> Result<()> {
 }
 
 pub fn archive_project(conn: &Connection, id: i64) -> Result<()> {
-    conn.execute("UPDATE projects SET archived = 1 WHERE id = ?;", params![id])?;
+    conn.execute(
+        "UPDATE projects SET archived = 1 WHERE id = ?;",
+        params![id],
+    )?;
     Ok(())
 }
 
 pub fn unarchive_project(conn: &Connection, id: i64) -> Result<()> {
-    conn.execute("UPDATE projects SET archived = 0 WHERE id = ?;", params![id])?;
+    conn.execute(
+        "UPDATE projects SET archived = 0 WHERE id = ?;",
+        params![id],
+    )?;
     Ok(())
 }
 
@@ -728,18 +776,20 @@ pub fn restore_task(conn: &Connection, id: i64) -> Result<()> {
         params![id],
         |row| row.get(0),
     )?;
-    
+
     let should_orphan = if let Some(pid) = project_id {
-        let proj_deleted: bool = conn.query_row(
-            "SELECT deleted FROM projects WHERE id = ?;",
-            params![pid],
-            |row| row.get(0),
-        ).unwrap_or(false);
+        let proj_deleted: bool = conn
+            .query_row(
+                "SELECT deleted FROM projects WHERE id = ?;",
+                params![pid],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
         proj_deleted
     } else {
         false
     };
-    
+
     if should_orphan {
         conn.execute(
             "UPDATE tasks SET deleted = 0, deleted_at = NULL, project_id = NULL WHERE id = ?;",
@@ -759,7 +809,7 @@ pub fn get_archived_projects(conn: &Connection) -> Result<Vec<ArchivedProjectJso
         "SELECT id, name, priority, created_at 
          FROM projects 
          WHERE archived = 1 AND deleted = 0 
-         ORDER BY priority DESC, name ASC;"
+         ORDER BY priority DESC, name ASC;",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(ArchivedProjectJson {
@@ -781,7 +831,7 @@ pub fn get_trash_items(conn: &Connection) -> Result<TrashResponse> {
         "SELECT id, name, priority, deleted_at 
          FROM projects 
          WHERE deleted = 1 
-         ORDER BY deleted_at DESC;"
+         ORDER BY deleted_at DESC;",
     )?;
     let proj_rows = stmt_proj.query_map([], |row| {
         Ok(TrashProject {
@@ -795,13 +845,13 @@ pub fn get_trash_items(conn: &Connection) -> Result<TrashResponse> {
     for r in proj_rows {
         projects.push(r?);
     }
-    
+
     let mut stmt_tasks = conn.prepare(
         "SELECT t.id, t.title, p.name as project_name, t.deleted_at 
          FROM tasks t
          LEFT JOIN projects p ON t.project_id = p.id
          WHERE t.deleted = 1 
-         ORDER BY t.deleted_at DESC;"
+         ORDER BY t.deleted_at DESC;",
     )?;
     let task_rows = stmt_tasks.query_map([], |row| {
         Ok(TrashTask {
@@ -815,7 +865,7 @@ pub fn get_trash_items(conn: &Connection) -> Result<TrashResponse> {
     for r in task_rows {
         tasks.push(r?);
     }
-    
+
     Ok(TrashResponse { projects, tasks })
 }
 
@@ -843,9 +893,14 @@ pub fn cleanup_expired_trash(conn: &Connection, trash_retention_days: i32) -> Re
 
 // GET PROJECTS STATUS
 
-pub fn get_projects_status(conn: &Connection, date_param: Option<&str>) -> Result<Vec<ProjectStatusResponse>> {
-    let target_date = date_param.map(|d| d.to_string()).unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string());
-    
+pub fn get_projects_status(
+    conn: &Connection,
+    date_param: Option<&str>,
+) -> Result<Vec<ProjectStatusResponse>> {
+    let target_date = date_param
+        .map(|d| d.to_string())
+        .unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string());
+
     let _ = carry_over_priorities(conn, &target_date);
 
     let mut stmt = conn.prepare("SELECT id, name, priority FROM projects WHERE deleted = 0 AND archived = 0 ORDER BY priority DESC, name ASC;")?;
@@ -914,26 +969,39 @@ pub fn get_projects_status(conn: &Connection, date_param: Option<&str>) -> Resul
            AND date(COALESCE(t.created_at, t.updated_at, 'now')) <= date(?)
          ORDER BY t.project_priority DESC, t.id ASC;"
     )?;
-    
-    let tasks_rows = stmt_tasks.query_map(params![target_date, target_date, target_date], |row| {
-        Ok((
-            row.get::<_, i64>(0)?,
-            row.get::<_, Option<i64>>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, i32>(3)?,
-            row.get::<_, bool>(4)?,
-            row.get::<_, bool>(5)?,
-            row.get::<_, String>(6)?,
-            row.get::<_, Option<String>>(7)?,
-            row.get::<_, i32>(8)?,
-            row.get::<_, bool>(9)?,
-            row.get::<_, String>(10)?,
-        ))
-    })?;
+
+    let tasks_rows =
+        stmt_tasks.query_map(params![target_date, target_date, target_date], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, Option<i64>>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i32>(3)?,
+                row.get::<_, bool>(4)?,
+                row.get::<_, bool>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, Option<String>>(7)?,
+                row.get::<_, i32>(8)?,
+                row.get::<_, bool>(9)?,
+                row.get::<_, String>(10)?,
+            ))
+        })?;
 
     for t in tasks_rows {
-        let (id, project_id, title, p_priority, is_daily, is_weekly, updated_at, completed_at, completion_percentage, planned_next, status) = t?;
-        
+        let (
+            id,
+            project_id,
+            title,
+            p_priority,
+            is_daily,
+            is_weekly,
+            updated_at,
+            completed_at,
+            completion_percentage,
+            planned_next,
+            status,
+        ) = t?;
+
         let task_json = TaskJson {
             task_id: id,
             title,
@@ -988,7 +1056,7 @@ pub fn get_summary(
     // Find all tasks completed/updated in the range, or currently pending
     // We want dates in YYYY-MM-DD format. We query tasks active in that range.
     // Daily summary: start_date == end_date.
-    
+
     // 1. Get all projects
     let mut stmt_proj = conn.prepare("SELECT id, name FROM projects WHERE deleted = 0 AND archived = 0 ORDER BY priority DESC, name ASC;")?;
     let proj_rows = stmt_proj.query_map([], |row| {
@@ -1097,18 +1165,53 @@ mod tests {
         run_migrations(&conn)?;
 
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let tomorrow = (chrono::Local::now() + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+        let tomorrow = (chrono::Local::now() + chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string();
 
         // 1. Create a project
         let project_id = create_project(&conn, "Test Project", 2)?;
 
         // 2. Create tasks
-        let task_id1 = create_task(&conn, Some(project_id), "Task 1", "todo", 1, true, false, Some(0), Some(&today))?;
-        let _task_id2 = create_task(&conn, Some(project_id), "Task 2", "todo", 0, false, false, Some(0), Some(&today))?;
+        let task_id1 = create_task(
+            &conn,
+            Some(project_id),
+            "Task 1",
+            "todo",
+            1,
+            true,
+            false,
+            Some(0),
+            Some(&today),
+        )?;
+        let _task_id2 = create_task(
+            &conn,
+            Some(project_id),
+            "Task 2",
+            "todo",
+            0,
+            false,
+            false,
+            Some(0),
+            Some(&today),
+        )?;
 
         // 3. Create Note (Progress update)
-        let note_id = create_task_update(&conn, task_id1, &today, "Started research", 30, "in_progress")?;
-        update_task_update(&conn, note_id, "Started research and models", 50, "in_progress")?;
+        let note_id = create_task_update(
+            &conn,
+            task_id1,
+            &today,
+            "Started research",
+            30,
+            "in_progress",
+        )?;
+        update_task_update(
+            &conn,
+            note_id,
+            "Started research and models",
+            50,
+            "in_progress",
+        )?;
 
         // Print table states
         {
@@ -1116,8 +1219,13 @@ mod tests {
             let rows = stmt.query_map([], |r| {
                 Ok(format!(
                     "Update: id={}, task_id={}, date={}, text={}, %={}, status={}, created_at={}",
-                    r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?,
-                    r.get::<_, i32>(4)?, r.get::<_, String>(5)?, r.get::<_, String>(6)?
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, i32>(4)?,
+                    r.get::<_, String>(5)?,
+                    r.get::<_, String>(6)?
                 ))
             })?;
             for r in rows {
@@ -1137,7 +1245,7 @@ mod tests {
         // 6. Test Carry Over to tomorrow
         let projects_status_tomorrow = get_projects_status(&conn, Some(&tomorrow))?;
         let tasks_tomorrow = &projects_status_tomorrow[0].tasks;
-        
+
         // Task 1 should have carried over because it was not completed (50% < 100%) and planned_for_next_day was true
         assert_eq!(tasks_tomorrow.on_my_plate.len(), 1);
         assert_eq!(tasks_tomorrow.on_my_plate[0].task_id, task_id1);
@@ -1148,7 +1256,7 @@ mod tests {
         let task1_deleted_note: (String, i32) = conn.query_row(
             "SELECT status, completion_percentage FROM tasks WHERE id = ?;",
             params![task_id1],
-            |row| Ok((row.get(0)?, row.get(1)?))
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
         assert_eq!(task1_deleted_note.0, "todo");
         assert_eq!(task1_deleted_note.1, 0);
@@ -1165,8 +1273,28 @@ mod tests {
 
         // 1. Create a project and tasks
         let project_id = create_project(&conn, "Test Project", 2)?;
-        let task_id1 = create_task(&conn, Some(project_id), "Task 1", "todo", 1, false, false, Some(0), Some(&today))?;
-        let _task_id2 = create_task(&conn, Some(project_id), "Task 2", "todo", 1, false, false, Some(0), Some(&today))?;
+        let task_id1 = create_task(
+            &conn,
+            Some(project_id),
+            "Task 1",
+            "todo",
+            1,
+            false,
+            false,
+            Some(0),
+            Some(&today),
+        )?;
+        let _task_id2 = create_task(
+            &conn,
+            Some(project_id),
+            "Task 2",
+            "todo",
+            1,
+            false,
+            false,
+            Some(0),
+            Some(&today),
+        )?;
 
         // 2. Test Archiving
         archive_project(&conn, project_id)?;
@@ -1177,7 +1305,7 @@ mod tests {
         // Active project query should exclude archived projects
         let active = get_projects_status(&conn, Some(&today))?;
         // Should only contain Ad-hoc project container, not Test Project
-        assert_eq!(active.len(), 1); 
+        assert_eq!(active.len(), 1);
         assert_eq!(active[0].project_id, None);
 
         // Unarchive project

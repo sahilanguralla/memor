@@ -1,0 +1,141 @@
+name: E2E Coverage
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  cache-main-coverage:
+    name: Cache Main E2E Coverage
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Restore main coverage cache
+        id: main-coverage-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .coverage-cache/main
+          key: ${{ runner.os }}-e2e-coverage-main-${{ github.sha }}
+
+      - name: Checkout main
+        if: steps.main-coverage-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: steps.main-coverage-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.main-coverage-cache.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        if: steps.main-coverage-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Run main e2e coverage
+        if: steps.main-coverage-cache.outputs.cache-hit != 'true'
+        run: |
+          rm -rf .nyc_output coverage test-results .coverage-cache
+          VITE_COVERAGE=true npx playwright test
+          npx nyc report --reporter=html --reporter=text --reporter=lcov --reporter=json-summary
+          mkdir -p .coverage-cache/main
+          cp coverage/coverage-summary.json .coverage-cache/main/coverage-summary.json
+          cp -R coverage .coverage-cache/main/report
+
+      - name: Save main coverage cache
+        if: steps.main-coverage-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .coverage-cache/main
+          key: ${{ runner.os }}-e2e-coverage-main-${{ github.sha }}
+
+      - name: Upload main coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-e2e-coverage-report
+          path: .coverage-cache/main/report
+          if-no-files-found: error
+
+  e2e-coverage:
+    name: E2E Tests & Coverage
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Restore cached base coverage
+        id: base-coverage-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: base-coverage-cache
+          key: ${{ runner.os }}-e2e-coverage-main-${{ github.event.pull_request.base.sha }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-coverage-main-
+
+      - name: Use cached base coverage
+        if: steps.base-coverage-cache.outputs.cache-matched-key != ''
+        run: cp base-coverage-cache/coverage-summary.json base-coverage-summary.json
+
+      - name: Note missing base coverage cache
+        if: steps.base-coverage-cache.outputs.cache-matched-key == ''
+        run: |
+          {
+            echo "## E2E Coverage Comparison"
+            echo
+            echo "Main coverage cache was not found for this PR base."
+            echo
+            echo "The PR e2e coverage report will still be generated, but the no-drop comparison is skipped until the workflow has run on main and seeded the cache."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+
+      - name: Setup Node.js for PR
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: head/package-lock.json
+
+      - name: Install PR dependencies
+        working-directory: head
+        run: npm ci
+
+      - name: Install Playwright Chromium for PR
+        working-directory: head
+        run: npx playwright install --with-deps chromium
+
+      - name: Run PR e2e coverage
+        working-directory: head
+        run: |
+          rm -rf .nyc_output coverage test-results
+          VITE_COVERAGE=true npx playwright test
+          npx nyc report --reporter=html --reporter=text --reporter=lcov --reporter=json-summary
+
+      - name: Compare coverage
+        if: steps.base-coverage-cache.outputs.cache-matched-key != ''
+        working-directory: head
+        run: node scripts/compare-coverage.mjs ../base-coverage-summary.json coverage/coverage-summary.json
+
+      - name: Upload PR coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-e2e-coverage-report
+          path: head/coverage
+          if-no-files-found: ignore
