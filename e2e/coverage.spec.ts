@@ -250,7 +250,10 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
 
     // Inline note CRUD
     await page.click('.modal-content .glass-panel button:has-text("✏️")');
-    await page.fill('.modal-content .glass-panel input[type="text"]', 'Updated inline note text');
+    const editNotePanel = page.locator(
+      '.modal-content .glass-panel:has(select[id^="edit-note-status-"])',
+    );
+    await editNotePanel.locator('input[type="text"]').fill('Updated inline note text');
 
     // Status sync inside inline note edit
     await page.selectOption('select[id^="edit-note-status-"]', 'done');

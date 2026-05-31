@@ -1556,6 +1556,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                             setNewNoteStatus(s);
                             if (s === 'done') {
                               setNewNotePercent(100);
+                            } else if (s === 'todo') {
+                              setNewNotePercent(0);
                             }
                           }}
                         >
@@ -1662,6 +1664,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                       setEditNoteStatus(s);
                                       if (s === 'done') {
                                         setEditNotePercent(100);
+                                      } else if (s === 'todo') {
+                                        setEditNotePercent(0);
                                       }
                                     }}
                                   >

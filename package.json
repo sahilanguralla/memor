@@ -14,7 +14,7 @@
     "lint": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write .",
     "test:e2e": "playwright test",
-    "test:e2e:coverage": "VITE_COVERAGE=true playwright test && nyc report --reporter=html --reporter=text --reporter=lcov"
+    "test:e2e:coverage": "VITE_COVERAGE=true playwright test && nyc report --reporter=html --reporter=text --reporter=lcov --reporter=json-summary"
   },
   "config": {
     "commitizen": {

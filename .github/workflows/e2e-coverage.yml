@@ -1,0 +1,85 @@
+name: E2E Coverage
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-coverage:
+    name: E2E Tests & Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      - name: Setup Node.js for base
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: base/package-lock.json
+
+      - name: Install base dependencies
+        working-directory: base
+        run: npm ci
+
+      - name: Install Playwright Chromium for base
+        working-directory: base
+        run: npx playwright install --with-deps chromium
+
+      - name: Run base e2e coverage
+        working-directory: base
+        run: |
+          rm -rf .nyc_output coverage test-results
+          VITE_COVERAGE=true npx playwright test
+          npx nyc report --reporter=html --reporter=text --reporter=lcov --reporter=json-summary
+          cp coverage/coverage-summary.json ../base-coverage-summary.json
+
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+
+      - name: Setup Node.js for PR
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: head/package-lock.json
+
+      - name: Install PR dependencies
+        working-directory: head
+        run: npm ci
+
+      - name: Install Playwright Chromium for PR
+        working-directory: head
+        run: npx playwright install --with-deps chromium
+
+      - name: Run PR e2e coverage
+        working-directory: head
+        run: |
+          rm -rf .nyc_output coverage test-results
+          VITE_COVERAGE=true npx playwright test
+          npx nyc report --reporter=html --reporter=text --reporter=lcov --reporter=json-summary
+
+      - name: Compare coverage
+        working-directory: head
+        run: node scripts/compare-coverage.mjs ../base-coverage-summary.json coverage/coverage-summary.json
+
+      - name: Upload PR coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-e2e-coverage-report
+          path: head/coverage
+          if-no-files-found: ignore
