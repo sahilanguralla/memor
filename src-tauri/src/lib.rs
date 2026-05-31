@@ -1,13 +1,15 @@
+#![allow(clippy::too_many_arguments, clippy::type_complexity)]
+
 pub mod db;
 pub mod http_server;
 pub mod keyring_helper;
 
-use std::sync::{Arc, Mutex};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, State, Emitter};
+use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 fn default_trash_retention_days() -> i32 {
     30
@@ -129,14 +131,22 @@ fn unlock_db(
 }
 
 #[tauri::command]
-fn get_projects(date: Option<String>, state: State<'_, AppState>) -> Result<Vec<db::ProjectStatusResponse>, String> {
+fn get_projects(
+    date: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<db::ProjectStatusResponse>, String> {
     let db_guard = state.db.lock().unwrap();
     let conn = db_guard.as_ref().ok_or("Database is locked")?;
     db::get_projects_status(conn, date.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn create_project(name: String, priority: i32, app: AppHandle, state: State<'_, AppState>) -> Result<i64, String> {
+fn create_project(
+    name: String,
+    priority: i32,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<i64, String> {
     let db_guard = state.db.lock().unwrap();
     let conn = db_guard.as_ref().ok_or("Database is locked")?;
     let id = db::create_project(conn, &name, priority).map_err(|e| e.to_string())?;
@@ -145,7 +155,13 @@ fn create_project(name: String, priority: i32, app: AppHandle, state: State<'_, 
 }
 
 #[tauri::command]
-fn update_project(id: i64, name: String, priority: i32, app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+fn update_project(
+    id: i64,
+    name: String,
+    priority: i32,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let db_guard = state.db.lock().unwrap();
     let conn = db_guard.as_ref().ok_or("Database is locked")?;
     db::update_project(conn, id, &name, priority).map_err(|e| e.to_string())?;
@@ -154,7 +170,12 @@ fn update_project(id: i64, name: String, priority: i32, app: AppHandle, state: S
 }
 
 #[tauri::command]
-fn delete_project(id: i64, delete_tasks: bool, app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+fn delete_project(
+    id: i64,
+    delete_tasks: bool,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let db_guard = state.db.lock().unwrap();
     let conn = db_guard.as_ref().ok_or("Database is locked")?;
     db::delete_project(conn, id, delete_tasks).map_err(|e| e.to_string())?;
@@ -181,7 +202,12 @@ fn unarchive_project(id: i64, app: AppHandle, state: State<'_, AppState>) -> Res
 }
 
 #[tauri::command]
-fn restore_project(id: i64, restore_tasks: bool, app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+fn restore_project(
+    id: i64,
+    restore_tasks: bool,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let db_guard = state.db.lock().unwrap();
     let conn = db_guard.as_ref().ok_or("Database is locked")?;
     db::restore_project(conn, id, restore_tasks).map_err(|e| e.to_string())?;
@@ -199,7 +225,9 @@ fn restore_task(id: i64, app: AppHandle, state: State<'_, AppState>) -> Result<(
 }
 
 #[tauri::command]
-fn get_archived_projects(state: State<'_, AppState>) -> Result<Vec<db::ArchivedProjectJson>, String> {
+fn get_archived_projects(
+    state: State<'_, AppState>,
+) -> Result<Vec<db::ArchivedProjectJson>, String> {
     let db_guard = state.db.lock().unwrap();
     let conn = db_guard.as_ref().ok_or("Database is locked")?;
     db::get_archived_projects(conn).map_err(|e| e.to_string())
@@ -308,7 +336,10 @@ fn delete_task(id: i64, app: AppHandle, state: State<'_, AppState>) -> Result<()
 }
 
 #[tauri::command]
-fn get_task_updates(task_id: i64, state: State<'_, AppState>) -> Result<Vec<db::TaskUpdateJson>, String> {
+fn get_task_updates(
+    task_id: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<db::TaskUpdateJson>, String> {
     let db_guard = state.db.lock().unwrap();
     let conn = db_guard.as_ref().ok_or("Database is locked")?;
     db::get_task_updates(conn, task_id).map_err(|e| e.to_string())
@@ -326,7 +357,15 @@ fn create_task_update(
 ) -> Result<i64, String> {
     let db_guard = state.db.lock().unwrap();
     let conn = db_guard.as_ref().ok_or("Database is locked")?;
-    let id = db::create_task_update(conn, task_id, &date, &update_text, completion_percentage, &status).map_err(|e| e.to_string())?;
+    let id = db::create_task_update(
+        conn,
+        task_id,
+        &date,
+        &update_text,
+        completion_percentage,
+        &status,
+    )
+    .map_err(|e| e.to_string())?;
     let _ = app.emit("tasks-changed", ());
     Ok(id)
 }
@@ -342,7 +381,8 @@ fn update_task_update(
 ) -> Result<(), String> {
     let db_guard = state.db.lock().unwrap();
     let conn = db_guard.as_ref().ok_or("Database is locked")?;
-    db::update_task_update(conn, id, &update_text, completion_percentage, &status).map_err(|e| e.to_string())?;
+    db::update_task_update(conn, id, &update_text, completion_percentage, &status)
+        .map_err(|e| e.to_string())?;
     let _ = app.emit("tasks-changed", ());
     Ok(())
 }
@@ -364,22 +404,28 @@ fn get_timeline(state: State<'_, AppState>) -> Result<Vec<db::TaskUpdateJson>, S
 }
 
 #[tauri::command]
-fn get_daily_summary(date: String, state: State<'_, AppState>) -> Result<db::SummaryResponse, String> {
+fn get_daily_summary(
+    date: String,
+    state: State<'_, AppState>,
+) -> Result<db::SummaryResponse, String> {
     let db_guard = state.db.lock().unwrap();
     let conn = db_guard.as_ref().ok_or("Database is locked")?;
     db::get_summary(conn, "daily", &date, &date).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn get_weekly_summary(start_date: String, state: State<'_, AppState>) -> Result<db::SummaryResponse, String> {
+fn get_weekly_summary(
+    start_date: String,
+    state: State<'_, AppState>,
+) -> Result<db::SummaryResponse, String> {
     let db_guard = state.db.lock().unwrap();
     let conn = db_guard.as_ref().ok_or("Database is locked")?;
-    
+
     let parsed_start = chrono::NaiveDate::parse_from_str(&start_date, "%Y-%m-%d")
         .map_err(|e| format!("Invalid start_date: {}", e))?;
     let parsed_end = parsed_start + chrono::Duration::days(6);
     let end_date = parsed_end.format("%Y-%m-%d").to_string();
-    
+
     db::get_summary(conn, "weekly", &start_date, &end_date).map_err(|e| e.to_string())
 }
 
@@ -406,7 +452,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Setup app data directories and database paths
-            let app_data_dir = app.path().app_data_dir().expect("Failed to get app data directory");
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .expect("Failed to get app data directory");
             std::fs::create_dir_all(&app_data_dir).expect("Failed to create app data directory");
 
             let db_path = app_data_dir.join("memor.db");
@@ -431,27 +480,29 @@ pub fn run() {
             let tray_menu = Menu::with_items(app, &[&show_item, &lock_item, &quit_item])?;
 
             let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().cloned().expect("Default window icon missing"))
+                .icon(
+                    app.default_window_icon()
+                        .cloned()
+                        .expect("Default window icon missing"),
+                )
                 .menu(&tray_menu)
-                .on_menu_event(|app, event| {
-                    match event.id.as_ref() {
-                        "show" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
                         }
-                        "lock" => {
-                            let state: State<AppState> = app.state();
-                            let mut db_guard = state.db.lock().unwrap();
-                            *db_guard = None;
-                            let _ = app.emit("database-locked", ());
-                        }
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        _ => {}
                     }
+                    "lock" => {
+                        let state: State<AppState> = app.state();
+                        let mut db_guard = state.db.lock().unwrap();
+                        *db_guard = None;
+                        let _ = app.emit("database-locked", ());
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
                 })
                 .build(app)?;
 

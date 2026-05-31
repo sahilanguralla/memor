@@ -1,8 +1,8 @@
-use std::sync::{Arc, Mutex};
+use crate::db;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::db;
+use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 
 pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHandle) {
@@ -23,13 +23,25 @@ pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHa
                 let response = tiny_http::Response::new(
                     tiny_http::StatusCode(204),
                     vec![
-                        tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap(),
-                        tiny_http::Header::from_bytes(&b"Access-Control-Allow-Methods"[..], &b"GET, POST, PUT, DELETE, OPTIONS"[..]).unwrap(),
-                        tiny_http::Header::from_bytes(&b"Access-Control-Allow-Headers"[..], &b"Content-Type"[..]).unwrap(),
+                        tiny_http::Header::from_bytes(
+                            &b"Access-Control-Allow-Origin"[..],
+                            &b"*"[..],
+                        )
+                        .unwrap(),
+                        tiny_http::Header::from_bytes(
+                            &b"Access-Control-Allow-Methods"[..],
+                            &b"GET, POST, PUT, DELETE, OPTIONS"[..],
+                        )
+                        .unwrap(),
+                        tiny_http::Header::from_bytes(
+                            &b"Access-Control-Allow-Headers"[..],
+                            &b"Content-Type"[..],
+                        )
+                        .unwrap(),
                     ],
                     &[][..],
                     Some(0),
-                    None
+                    None,
                 );
                 let _ = request.respond(response);
                 continue;
@@ -52,7 +64,11 @@ pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHa
             let conn = match &mut *db_guard {
                 Some(c) => c,
                 None => {
-                    respond_error(request, 401, "Database is locked. Please unlock in the Memor application first.");
+                    respond_error(
+                        request,
+                        401,
+                        "Database is locked. Please unlock in the Memor application first.",
+                    );
                     continue;
                 }
             };
@@ -90,13 +106,19 @@ pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHa
                     match db::create_project(conn, &payload.name, priority) {
                         Ok(id) => {
                             let _ = app_handle.emit("tasks-changed", ());
-                            respond_json(request, 201, &serde_json::json!({
-                                "project_id": id,
-                                "project_name": payload.name,
-                                "project_priority": priority
-                            }));
+                            respond_json(
+                                request,
+                                201,
+                                &serde_json::json!({
+                                    "project_id": id,
+                                    "project_name": payload.name,
+                                    "project_priority": priority
+                                }),
+                            );
                         }
-                        Err(e) => respond_error(request, 500, &format!("Failed to create project: {}", e)),
+                        Err(e) => {
+                            respond_error(request, 500, &format!("Failed to create project: {}", e))
+                        }
                     }
                 }
                 (&tiny_http::Method::Post, "/tasks") => {
@@ -175,15 +197,27 @@ pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHa
                         );
 
                         match existing {
-                            Ok((curr_proj, curr_title, curr_status, curr_p_priority, curr_daily, curr_weekly, curr_percent, curr_planned_next)) => {
+                            Ok((
+                                curr_proj,
+                                curr_title,
+                                curr_status,
+                                curr_p_priority,
+                                curr_daily,
+                                curr_weekly,
+                                curr_percent,
+                                curr_planned_next,
+                            )) => {
                                 let new_proj = payload.project_id.or(curr_proj);
                                 let new_title = payload.title.as_deref().unwrap_or(&curr_title);
                                 let new_status = payload.status.as_deref().unwrap_or(&curr_status);
-                                let new_p_priority = payload.project_priority.unwrap_or(curr_p_priority);
+                                let new_p_priority =
+                                    payload.project_priority.unwrap_or(curr_p_priority);
                                 let new_daily = payload.is_daily_priority.unwrap_or(curr_daily);
                                 let new_weekly = payload.is_weekly_priority.unwrap_or(curr_weekly);
-                                let new_percent = payload.completion_percentage.or(Some(curr_percent));
-                                let new_planned_next = payload.planned_for_next_day.or(Some(curr_planned_next));
+                                let new_percent =
+                                    payload.completion_percentage.or(Some(curr_percent));
+                                let new_planned_next =
+                                    payload.planned_for_next_day.or(Some(curr_planned_next));
 
                                 match db::update_task(
                                     conn,
@@ -201,9 +235,17 @@ pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHa
                                 ) {
                                     Ok(_) => {
                                         let _ = app_handle.emit("tasks-changed", ());
-                                        respond_json(request, 200, &serde_json::json!({ "status": "success", "task_id": tid }));
+                                        respond_json(
+                                            request,
+                                            200,
+                                            &serde_json::json!({ "status": "success", "task_id": tid }),
+                                        );
                                     }
-                                    Err(e) => respond_error(request, 500, &format!("Failed to update task: {}", e)),
+                                    Err(e) => respond_error(
+                                        request,
+                                        500,
+                                        &format!("Failed to update task: {}", e),
+                                    ),
                                 }
                             }
                             Err(_) => respond_error(request, 404, "Task not found"),
@@ -238,12 +280,20 @@ pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHa
                         ) {
                             Ok(new_id) => {
                                 let _ = app_handle.emit("tasks-changed", ());
-                                respond_json(request, 201, &serde_json::json!({
-                                    "status": "success",
-                                    "task_id": new_id
-                                }));
+                                respond_json(
+                                    request,
+                                    201,
+                                    &serde_json::json!({
+                                        "status": "success",
+                                        "task_id": new_id
+                                    }),
+                                );
                             }
-                            Err(e) => respond_error(request, 500, &format!("Failed to create task: {}", e)),
+                            Err(e) => respond_error(
+                                request,
+                                500,
+                                &format!("Failed to create task: {}", e),
+                            ),
                         }
                     }
                 }
@@ -255,7 +305,11 @@ pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHa
 
                     match db::get_summary(conn, "daily", &date_str, &date_str) {
                         Ok(summary) => respond_json(request, 200, &summary),
-                        Err(e) => respond_error(request, 500, &format!("Failed to generate summary: {}", e)),
+                        Err(e) => respond_error(
+                            request,
+                            500,
+                            &format!("Failed to generate summary: {}", e),
+                        ),
                     }
                 }
                 (&tiny_http::Method::Get, "/summary/weekly") => {
@@ -267,33 +321,46 @@ pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHa
                         }
                     };
 
-                    let parsed_start = match chrono::NaiveDate::parse_from_str(&start_date_str, "%Y-%m-%d") {
-                        Ok(d) => d,
-                        Err(_) => {
-                            respond_error(request, 400, "Invalid start_date format. Must be YYYY-MM-DD");
-                            continue;
-                        }
-                    };
+                    let parsed_start =
+                        match chrono::NaiveDate::parse_from_str(&start_date_str, "%Y-%m-%d") {
+                            Ok(d) => d,
+                            Err(_) => {
+                                respond_error(
+                                    request,
+                                    400,
+                                    "Invalid start_date format. Must be YYYY-MM-DD",
+                                );
+                                continue;
+                            }
+                        };
 
                     let parsed_end = parsed_start + chrono::Duration::days(6);
                     let end_date_str = parsed_end.format("%Y-%m-%d").to_string();
 
                     match db::get_summary(conn, "weekly", &start_date_str, &end_date_str) {
                         Ok(summary) => respond_json(request, 200, &summary),
-                        Err(e) => respond_error(request, 500, &format!("Failed to generate summary: {}", e)),
+                        Err(e) => respond_error(
+                            request,
+                            500,
+                            &format!("Failed to generate summary: {}", e),
+                        ),
                     }
                 }
-                (&tiny_http::Method::Get, "/timeline") => {
-                    match db::get_timeline(conn) {
-                        Ok(timeline) => respond_json(request, 200, &timeline),
-                        Err(e) => respond_error(request, 500, &format!("Failed to fetch timeline: {}", e)),
+                (&tiny_http::Method::Get, "/timeline") => match db::get_timeline(conn) {
+                    Ok(timeline) => respond_json(request, 200, &timeline),
+                    Err(e) => {
+                        respond_error(request, 500, &format!("Failed to fetch timeline: {}", e))
                     }
-                }
+                },
                 (&tiny_http::Method::Get, "/task_updates") => {
                     let task_id_str = match query.get("task_id") {
                         Some(t) => t,
                         None => {
-                            respond_error(request, 400, "Missing required query parameter: task_id");
+                            respond_error(
+                                request,
+                                400,
+                                "Missing required query parameter: task_id",
+                            );
                             continue;
                         }
                     };
@@ -340,12 +407,18 @@ pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHa
                     ) {
                         Ok(new_id) => {
                             let _ = app_handle.emit("tasks-changed", ());
-                            respond_json(request, 201, &serde_json::json!({
-                                "status": "success",
-                                "update_id": new_id
-                            }));
+                            respond_json(
+                                request,
+                                201,
+                                &serde_json::json!({
+                                    "status": "success",
+                                    "update_id": new_id
+                                }),
+                            );
                         }
-                        Err(e) => respond_error(request, 500, &format!("Failed to create update: {}", e)),
+                        Err(e) => {
+                            respond_error(request, 500, &format!("Failed to create update: {}", e))
+                        }
                     }
                 }
                 (&tiny_http::Method::Put, "/task_updates") => {
@@ -379,7 +452,9 @@ pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHa
                             let _ = app_handle.emit("tasks-changed", ());
                             respond_json(request, 200, &serde_json::json!({ "status": "success" }));
                         }
-                        Err(e) => respond_error(request, 500, &format!("Failed to update note: {}", e)),
+                        Err(e) => {
+                            respond_error(request, 500, &format!("Failed to update note: {}", e))
+                        }
                     }
                 }
                 (&tiny_http::Method::Delete, "/task_updates") => {
@@ -402,7 +477,9 @@ pub fn start_server(db: Arc<Mutex<Option<Connection>>>, app_handle: tauri::AppHa
                             let _ = app_handle.emit("tasks-changed", ());
                             respond_json(request, 200, &serde_json::json!({ "status": "success" }));
                         }
-                        Err(e) => respond_error(request, 500, &format!("Failed to delete note: {}", e)),
+                        Err(e) => {
+                            respond_error(request, 500, &format!("Failed to delete note: {}", e))
+                        }
                     }
                 }
                 _ => {
@@ -422,7 +499,7 @@ fn respond_json<T: Serialize>(request: tiny_http::Request, status_code: u16, dat
                 vec![],
                 &b"Internal Server Error"[..],
                 Some(21),
-                None
+                None,
             ));
             return;
         }
@@ -433,12 +510,20 @@ fn respond_json<T: Serialize>(request: tiny_http::Request, status_code: u16, dat
         vec![
             tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
             tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap(),
-            tiny_http::Header::from_bytes(&b"Access-Control-Allow-Methods"[..], &b"GET, POST, PUT, DELETE, OPTIONS"[..]).unwrap(),
-            tiny_http::Header::from_bytes(&b"Access-Control-Allow-Headers"[..], &b"Content-Type"[..]).unwrap(),
+            tiny_http::Header::from_bytes(
+                &b"Access-Control-Allow-Methods"[..],
+                &b"GET, POST, PUT, DELETE, OPTIONS"[..],
+            )
+            .unwrap(),
+            tiny_http::Header::from_bytes(
+                &b"Access-Control-Allow-Headers"[..],
+                &b"Content-Type"[..],
+            )
+            .unwrap(),
         ],
         json_bytes.as_slice(),
         Some(json_bytes.len()),
-        None
+        None,
     );
 
     let _ = request.respond(response);
