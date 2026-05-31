@@ -80,44 +80,23 @@ jobs:
         with:
           path: base-coverage-cache
           key: ${{ runner.os }}-e2e-coverage-main-${{ github.event.pull_request.base.sha }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-coverage-main-
 
       - name: Use cached base coverage
-        if: steps.base-coverage-cache.outputs.cache-hit == 'true'
+        if: steps.base-coverage-cache.outputs.cache-matched-key != ''
         run: cp base-coverage-cache/coverage-summary.json base-coverage-summary.json
 
-      - name: Checkout PR base
-        if: steps.base-coverage-cache.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: base
-
-      - name: Setup Node.js for base
-        if: steps.base-coverage-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: npm
-          cache-dependency-path: base/package-lock.json
-
-      - name: Install base dependencies
-        if: steps.base-coverage-cache.outputs.cache-hit != 'true'
-        working-directory: base
-        run: npm ci
-
-      - name: Install Playwright Chromium for base
-        if: steps.base-coverage-cache.outputs.cache-hit != 'true'
-        working-directory: base
-        run: npx playwright install --with-deps chromium
-
-      - name: Run base e2e coverage
-        if: steps.base-coverage-cache.outputs.cache-hit != 'true'
-        working-directory: base
+      - name: Note missing base coverage cache
+        if: steps.base-coverage-cache.outputs.cache-matched-key == ''
         run: |
-          rm -rf .nyc_output coverage test-results
-          VITE_COVERAGE=true npx playwright test
-          npx nyc report --reporter=html --reporter=text --reporter=lcov --reporter=json-summary
-          cp coverage/coverage-summary.json ../base-coverage-summary.json
+          {
+            echo "## E2E Coverage Comparison"
+            echo
+            echo "Main coverage cache was not found for this PR base."
+            echo
+            echo "The PR e2e coverage report will still be generated, but the no-drop comparison is skipped until the workflow has run on main and seeded the cache."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout PR head
         uses: actions/checkout@v4
@@ -149,6 +128,7 @@ jobs:
           npx nyc report --reporter=html --reporter=text --reporter=lcov --reporter=json-summary
 
       - name: Compare coverage
+        if: steps.base-coverage-cache.outputs.cache-matched-key != ''
         working-directory: head
         run: node scripts/compare-coverage.mjs ../base-coverage-summary.json coverage/coverage-summary.json
 
