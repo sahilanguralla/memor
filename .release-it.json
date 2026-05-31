@@ -1,0 +1,29 @@
+{
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": "conventionalcommits",
+      "infile": "CHANGELOG.md"
+    },
+    "@release-it/bumper": {
+      "out": [
+        {
+          "file": "src-tauri/tauri.conf.json",
+          "path": "version"
+        },
+        {
+          "file": "src-tauri/Cargo.toml",
+          "path": "package.version"
+        }
+      ]
+    }
+  },
+  "git": {
+    "commitMessage": "chore: release v${version}"
+  },
+  "npm": {
+    "publish": false
+  },
+  "hooks": {
+    "after:bump": "cargo check --manifest-path src-tauri/Cargo.toml"
+  }
+}

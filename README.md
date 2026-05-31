@@ -66,13 +66,16 @@ npm run tauri dev
 ## Local HTTP API Documentation (`127.0.0.1:3030`)
 
 If the database is locked, all endpoints will return `401 Unauthorized` with:
+
 ```json
 { "error": "Database is locked. Please unlock in the Memor application first." }
 ```
 
 ### 1. Retrieve Projects & Tasks
+
 - **Endpoint**: `GET /projects` or `GET /projects?date=YYYY-MM-DD` (defaults to today's local date)
 - **Response Format**: Task objects now include `completion_percentage` and `planned_for_next_day`.
+
 ```json
 [
   {
@@ -81,13 +84,28 @@ If the database is locked, all endpoints will return `401 Unauthorized` with:
     "project_priority": 2,
     "tasks": {
       "needs_to_do": [
-        { "task_id": 101, "title": "Design DB schema", "completion_percentage": 0, "planned_for_next_day": true }
+        {
+          "task_id": 101,
+          "title": "Design DB schema",
+          "completion_percentage": 0,
+          "planned_for_next_day": true
+        }
       ],
       "on_my_plate": [
-        { "task_id": 102, "title": "Write Rust backend", "completion_percentage": 45, "planned_for_next_day": true }
+        {
+          "task_id": 102,
+          "title": "Write Rust backend",
+          "completion_percentage": 45,
+          "planned_for_next_day": true
+        }
       ],
       "done": [
-        { "task_id": 103, "title": "Initialize Tauri project", "completion_percentage": 100, "planned_for_next_day": true }
+        {
+          "task_id": 103,
+          "title": "Initialize Tauri project",
+          "completion_percentage": 100,
+          "planned_for_next_day": true
+        }
       ]
     }
   }
@@ -95,8 +113,10 @@ If the database is locked, all endpoints will return `401 Unauthorized` with:
 ```
 
 ### 2. Create Project
+
 - **Endpoint**: `POST /projects`
 - **Payload**:
+
 ```json
 {
   "name": "Project Gamma",
@@ -105,8 +125,10 @@ If the database is locked, all endpoints will return `401 Unauthorized` with:
 ```
 
 ### 3. Create or Update Task
+
 - **Endpoint**: `POST /tasks`
 - **Payload (Create)**:
+
 ```json
 {
   "title": "Setup OAuth2 flow",
@@ -118,7 +140,9 @@ If the database is locked, all endpoints will return `401 Unauthorized` with:
   "date": "2026-05-31"
 }
 ```
+
 - **Payload (Update)**: Pass the `task_id` (or `id`) to perform a partial update on the task. Optionally pass progress details or comments:
+
 ```json
 {
   "task_id": 102,
@@ -131,8 +155,10 @@ If the database is locked, all endpoints will return `401 Unauthorized` with:
 ```
 
 ### 4. Retrieve Task Activity Timeline
+
 - **Endpoint**: `GET /timeline`
 - **Response Format**: Returns a chronological history of all task updates and notes:
+
 ```json
 [
   {
@@ -149,6 +175,7 @@ If the database is locked, all endpoints will return `401 Unauthorized` with:
 ```
 
 ### 5. Manage Task Progress Updates & Daily Notes
+
 - **Retrieve Task Notes**: `GET /task_updates?task_id=102`
 - **Create Note**: `POST /task_updates`
   - **Payload**:
@@ -174,8 +201,10 @@ If the database is locked, all endpoints will return `401 Unauthorized` with:
 - **Delete Note**: `DELETE /task_updates?id=1`
 
 ### 6. Daily Summary
+
 - **Endpoint**: `GET /summary/daily?date=YYYY-MM-DD` (defaults to today's local date)
 - **Response Format**:
+
 ```json
 {
   "summary_type": "daily",
@@ -193,6 +222,7 @@ If the database is locked, all endpoints will return `401 Unauthorized` with:
 ```
 
 ### 7. Weekly Summary
+
 - **Endpoint**: `GET /summary/weekly?start_date=YYYY-MM-DD` (defaults to 7 days ago)
 - **Response Format**: Same structure as the daily summary, covering a 7-day period starting from `start_date`.
 
@@ -224,4 +254,3 @@ This will output the installers in `src-tauri/target/release/bundle/`:
 - 🐧 **Linux**: `.deb` (Debian/Ubuntu package) or `.AppImage` (standalone portable binary)
 - 🍏 **macOS**: `.dmg` (Apple disk image) or `.app` (application bundle)
 - 🪟 **Windows**: `.msi` (Microsoft Installer) or `.exe` (setup executable)
-

@@ -4,7 +4,7 @@ export interface Task {
   project_priority: number; // 0=Low, 1=Medium, 2=High
   is_daily_priority: boolean;
   is_weekly_priority: boolean;
-  status: "todo" | "in_progress" | "done";
+  status: 'todo' | 'in_progress' | 'done';
   updated_at: string;
   completed_at: string | null;
   completion_percentage: number;
@@ -18,7 +18,7 @@ export interface TaskUpdate {
   date: string;
   update_text: string;
   completion_percentage: number;
-  status: "todo" | "in_progress" | "done";
+  status: 'todo' | 'in_progress' | 'done';
   created_at: string;
 }
 
@@ -43,7 +43,7 @@ export interface ProjectSummary {
 }
 
 export interface SummaryResponse {
-  summary_type: "daily" | "weekly";
+  summary_type: 'daily' | 'weekly';
   start_date: string;
   end_date: string;
   projects: ProjectSummary[];

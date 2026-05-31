@@ -1,5 +1,12 @@
 let cleanupFn: (() => void) | null = null;
 
+export function stopIdleTimer() {
+  if (cleanupFn) {
+    cleanupFn();
+    cleanupFn = null;
+  }
+}
+
 export function startIdleTimer(timeoutMins: number, onTimeout: () => void) {
   // Always clean up the previous timer first
   stopIdleTimer();
@@ -14,7 +21,7 @@ export function startIdleTimer(timeoutMins: number, onTimeout: () => void) {
     timerId = setTimeout(onTimeout, timeoutMs);
   };
 
-  const events = ["mousemove", "mousedown", "keypress", "scroll", "click", "touchstart"];
+  const events = ['mousemove', 'mousedown', 'keypress', 'scroll', 'click', 'touchstart'];
 
   events.forEach((evt) => {
     window.addEventListener(evt, resetTimer, { passive: true });
@@ -26,11 +33,4 @@ export function startIdleTimer(timeoutMins: number, onTimeout: () => void) {
       window.removeEventListener(evt, resetTimer);
     });
   };
-}
-
-export function stopIdleTimer() {
-  if (cleanupFn) {
-    cleanupFn();
-    cleanupFn = null;
-  }
 }
