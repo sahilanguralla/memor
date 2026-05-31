@@ -1,21 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import './App.css';
+import '../styles/App.css';
 
-import { Project } from './types';
-import { LockScreen } from './components/LockScreen';
-import { Dashboard } from './components/Dashboard';
-import { SummaryView } from './components/SummaryView';
-import { Settings } from './components/Settings';
-import { TimelineView } from './components/TimelineView';
-import { startIdleTimer, stopIdleTimer } from './utils/idle_timer';
-
-type Tab = 'dashboard' | 'summary' | 'settings' | 'timeline';
+import { Project } from '../domain/types';
+import { LockScreen } from '../features/auth/LockScreen';
+import { Dashboard } from '../features/dashboard/Dashboard';
+import { Settings } from '../features/settings/Settings';
+import { SummaryView } from '../features/summary/SummaryView';
+import { TimelineView } from '../features/timeline/TimelineView';
+import { startIdleTimer, stopIdleTimer } from '../shared/utils/idleTimer';
+import { AppShell, AppTab } from './AppShell';
 
 const App = () => {
   const [isUnlocked, setIsUnlocked] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
@@ -118,74 +117,19 @@ const App = () => {
   }
 
   return (
-    <div className="app-container">
-      <div className="main-content">
-        {/* Navigation Bar */}
-        <nav className="top-nav">
-          <div className="brand">
-            <span style={{ fontSize: '22px' }}>🛡️</span>
-            <h1>Memor</h1>
-          </div>
-
-          <div className="nav-links">
-            <button
-              type="button"
-              className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => setActiveTab('dashboard')}
-            >
-              📋 Dashboard
-            </button>
-            <button
-              type="button"
-              className={`nav-btn ${activeTab === 'timeline' ? 'active' : ''}`}
-              onClick={() => setActiveTab('timeline')}
-            >
-              📜 Activity
-            </button>
-            <button
-              type="button"
-              className={`nav-btn ${activeTab === 'summary' ? 'active' : ''}`}
-              onClick={() => setActiveTab('summary')}
-            >
-              📈 Summaries
-            </button>
-            <button
-              type="button"
-              className={`nav-btn ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('settings')}
-            >
-              ⚙️ Settings
-            </button>
-          </div>
-
-          <div>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleLock}
-              style={{ padding: '6px 12px', fontSize: '13px' }}
-            >
-              🔒 Lock
-            </button>
-          </div>
-        </nav>
-
-        {/* View Selection */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {activeTab === 'dashboard' && (
-            <Dashboard
-              projects={projects}
-              refreshData={refreshData}
-              selectedDate={selectedDate}
-              setSelectedDate={setSelectedDate}
-            />
-          )}
-          {activeTab === 'timeline' && <TimelineView />}
-          {activeTab === 'summary' && <SummaryView />}
-          {activeTab === 'settings' && <Settings onLock={() => setIsUnlocked(false)} />}
-        </div>
-      </div>
-    </div>
+    <AppShell activeTab={activeTab} onLock={handleLock} onTabChange={setActiveTab}>
+      {activeTab === 'dashboard' && (
+        <Dashboard
+          projects={projects}
+          refreshData={refreshData}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+        />
+      )}
+      {activeTab === 'timeline' && <TimelineView />}
+      {activeTab === 'summary' && <SummaryView />}
+      {activeTab === 'settings' && <Settings onLock={() => setIsUnlocked(false)} />}
+    </AppShell>
   );
 };
 

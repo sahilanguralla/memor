@@ -11,8 +11,8 @@ export default defineConfig(async () => ({
     react(),
     process.env.VITE_COVERAGE === 'true' &&
       istanbul({
-        include: 'src/*',
-        exclude: ['node_modules', 'test/*', 'e2e/*'],
+        include: 'src/**/*',
+        exclude: ['node_modules', 'src/**/*.e2e.spec.ts', 'src/test/**/*'],
         extension: ['.js', '.ts', '.jsx', '.tsx'],
         requireEnv: false,
       }),

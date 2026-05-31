@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect } from '../../test/e2e/fixtures';
 
 test.describe('Memor E2E Test Suite', () => {
   test.beforeEach(async ({ page }) => {

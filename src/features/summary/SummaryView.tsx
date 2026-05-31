@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { SummaryResponse } from '../types';
+import { SummaryResponse } from '../../domain/types';
 
 export const SummaryView: React.FC = () => {
   const [summaryType, setSummaryType] = useState<'daily' | 'weekly'>('daily');

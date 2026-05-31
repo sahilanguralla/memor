@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { TaskUpdate } from '../types';
+import { TaskUpdate } from '../../domain/types';
 
 export const TimelineView: React.FC = () => {
   const [updates, setUpdates] = useState<TaskUpdate[]>([]);

@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect } from '../../test/e2e/fixtures';
 
 const login = async (page: import('@playwright/test').Page) => {
   await page.goto('/');
@@ -80,7 +80,9 @@ test.describe('Memor additional E2E coverage', () => {
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 
     await page.fill('.dashboard-view input[type="date"]', yesterdayStr);
-    await expect(page.locator('.dashboard-view')).toContainText(`Viewing past date: ${yesterdayStr}`);
+    await expect(page.locator('.dashboard-view')).toContainText(
+      `Viewing past date: ${yesterdayStr}`,
+    );
 
     await page.click('button:has-text("+ Add Task")');
     await page.fill('#t-title', 'Backfill yesterday retro');

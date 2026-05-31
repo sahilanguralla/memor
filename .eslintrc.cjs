@@ -46,4 +46,20 @@ module.exports = {
       },
     ],
   },
+  overrides: [
+    {
+      files: ['src/**/*.e2e.spec.ts', 'src/test/**/*.ts'],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'off',
+        '@typescript-eslint/naming-convention': 'off',
+        'consistent-return': 'off',
+        'import/no-extraneous-dependencies': 'off',
+        'no-nested-ternary': 'off',
+        'no-param-reassign': 'off',
+        'no-plusplus': 'off',
+        'no-console': 'off',
+        'no-underscore-dangle': 'off',
+      },
+    },
+  ],
 };

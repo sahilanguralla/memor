@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { AppConfig } from '../types';
-import { showAlert } from '../utils/dialogs';
+import { AppConfig } from '../../domain/types';
+import { showAlert } from '../../shared/utils/dialogs';
 
 interface SettingsProps {
   onLock: () => void;
