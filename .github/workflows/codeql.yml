@@ -59,7 +59,38 @@ jobs:
         # your codebase is analyzed, see https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/codeql-code-scanning-for-compiled-languages
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
+
+    - name: Setup Node.js (JS/TS only)
+      if: matrix.language == 'javascript-typescript'
+      uses: actions/setup-node@v6
+      with:
+        node-version: lts/*
+
+    - name: Install Linux dependencies (Rust only)
+      if: matrix.language == 'rust'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libsoup-3.0-dev \
+          libwebkit2gtk-4.1-dev \
+          build-essential \
+          curl \
+          wget \
+          file \
+          libssl-dev \
+          libgtk-3-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev
+
+    - name: Install Rust stable (Rust only)
+      if: matrix.language == 'rust'
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Create temporary root Cargo.toml workspace (Rust only)
+      if: matrix.language == 'rust'
+      run: |
+        echo -e "[workspace]\nmembers = [\"src-tauri\"]" > Cargo.toml
 
     # Add any setup steps before running the `github/codeql-action/init` action.
     # This includes steps like installing compilers or runtimes (`actions/setup-node`
@@ -73,6 +104,7 @@ jobs:
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
+        config-file: ./.github/codeql/codeql-config.yml
         # If you wish to specify custom queries, you can do so here or in a config file.
         # By default, queries listed here will override any specified in a config file.
         # Prefix the list here with "+" to use these queries and those in the config file.
