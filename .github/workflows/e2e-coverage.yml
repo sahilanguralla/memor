@@ -78,14 +78,14 @@ jobs:
         id: base-coverage-cache
         uses: actions/cache/restore@v5
         with:
-          path: base-coverage-cache
+          path: .coverage-cache/main
           key: ${{ runner.os }}-e2e-coverage-main-${{ github.event.pull_request.base.sha }}
           restore-keys: |
             ${{ runner.os }}-e2e-coverage-main-
 
       - name: Use cached base coverage
         if: steps.base-coverage-cache.outputs.cache-matched-key != ''
-        run: cp base-coverage-cache/coverage-summary.json base-coverage-summary.json
+        run: cp .coverage-cache/main/coverage-summary.json base-coverage-summary.json
 
       - name: Note missing base coverage cache
         if: steps.base-coverage-cache.outputs.cache-matched-key == ''
