@@ -3,6 +3,7 @@ name: "CodeQL Custom Config"
 # Limit analysis to production source directory
 paths:
   - src
+  - src-tauri
 
 # Ignore tests, build results, and configuration files to reduce noise
 paths-ignore:
