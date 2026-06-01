@@ -48,6 +48,13 @@ module.exports = {
   },
   overrides: [
     {
+      files: ['e2e/**/*.ts'],
+      extends: ['plugin:playwright/recommended'],
+      rules: {
+        'playwright/no-standalone-expect': 'off',
+      },
+    },
+    {
       files: ['src/**/*.e2e.spec.ts', 'src/test/**/*.ts'],
       rules: {
         '@typescript-eslint/no-explicit-any': 'off',

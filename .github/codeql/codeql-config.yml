@@ -1,0 +1,13 @@
+name: "CodeQL Custom Config"
+
+# Limit analysis to production source directory
+paths:
+  - src
+
+# Ignore tests, build results, and configuration files to reduce noise
+paths-ignore:
+  - e2e
+  - coverage
+  - '*.config.ts'
+  - '*.config.js'
+  - '.*rc.cjs'
