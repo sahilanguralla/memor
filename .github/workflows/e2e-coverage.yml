@@ -20,18 +20,18 @@ jobs:
     steps:
       - name: Restore main coverage cache
         id: main-coverage-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .coverage-cache/main
           key: ${{ runner.os }}-e2e-coverage-main-${{ github.sha }}
 
       - name: Checkout main
         if: steps.main-coverage-cache.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         if: steps.main-coverage-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: lts/*
           cache: npm
@@ -56,13 +56,13 @@ jobs:
 
       - name: Save main coverage cache
         if: steps.main-coverage-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: .coverage-cache/main
           key: ${{ runner.os }}-e2e-coverage-main-${{ github.sha }}
 
       - name: Upload main coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: main-e2e-coverage-report
           path: .coverage-cache/main/report
@@ -76,7 +76,7 @@ jobs:
     steps:
       - name: Restore cached base coverage
         id: base-coverage-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: base-coverage-cache
           key: ${{ runner.os }}-e2e-coverage-main-${{ github.event.pull_request.base.sha }}
@@ -99,14 +99,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
           path: head
 
       - name: Setup Node.js for PR
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: lts/*
           cache: npm
@@ -134,7 +134,7 @@ jobs:
 
       - name: Upload PR coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-e2e-coverage-report
           path: head/coverage
