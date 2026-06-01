@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect } from '../../test/e2e/fixtures';
 
 test.describe('Memor E2E Coverage Expansion Suite', () => {
   let dialogAction: 'accept' | 'dismiss' | 'default' = 'default';
@@ -32,7 +32,9 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.goto('/');
   });
 
-  test('Lock Screen - Auto Unlock success, error, and empty password validation', async ({ page }) => {
+  test('Lock Screen - Auto Unlock success, error, and empty password validation', async ({
+    page,
+  }) => {
     // 1. Auto unlock success (mock unlock_db_with_saved_key returns true)
     await page.addInitScript(() => {
       (window as any).__TAURI_INTERNALS__ = (window as any).__TAURI_INTERNALS__ || {};
@@ -199,13 +201,19 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
 
     // Plan Tomorrow empty carry-over state (delete uncompleted tasks to empty it)
     const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
-    await inProgressColumn.locator('.task-card:has-text("E2E Testing Implementation") button:has-text("🗑️")').click();
+    await inProgressColumn
+      .locator('.task-card:has-text("E2E Testing Implementation") button:has-text("🗑️")')
+      .click();
 
     const todoColumn = page.locator('.column-card:has-text("On My Plate")');
-    await todoColumn.locator('.task-card:has-text("Read book chapter") button:has-text("🗑️")').click();
+    await todoColumn
+      .locator('.task-card:has-text("Read book chapter") button:has-text("🗑️")')
+      .click();
 
     await page.click('button:has-text("Plan Tomorrow")');
-    await expect(page.locator('.modal-content')).toContainText('No uncompleted priorities on your day to plan!');
+    await expect(page.locator('.modal-content')).toContainText(
+      'No uncompleted priorities on your day to plan!',
+    );
     await page.click('.modal-content button:has-text("Close")');
   });
 
@@ -215,7 +223,9 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.click('button[type="submit"]');
 
     const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
-    await inProgressColumn.locator('.task-card:has-text("E2E Testing Implementation") button:has-text("✏️")').click();
+    await inProgressColumn
+      .locator('.task-card:has-text("E2E Testing Implementation") button:has-text("✏️")')
+      .click();
 
     // Done status synchronizes percent to 100
     await page.selectOption('#new-note-status-select', 'done');
@@ -230,7 +240,10 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
       // Clear React's internal value tracker to force onChange to fire
       const tracker = (slider as any)._valueTracker;
       if (tracker) tracker.setValue('');
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )?.set;
       nativeSetter?.call(slider, '100');
       slider.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -242,7 +255,10 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
       const slider = document.getElementById('new-note-percent-range') as HTMLInputElement;
       const tracker = (slider as any)._valueTracker;
       if (tracker) tracker.setValue('');
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )?.set;
       nativeSetter?.call(slider, '50');
       slider.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -257,7 +273,9 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
 
     // Status sync inside inline note edit
     await page.selectOption('select[id^="edit-note-status-"]', 'done');
-    const editNoteRange = page.locator('.glass-panel:not(.modal-content):has(select[id^="edit-note-status-"]) input[type="range"]');
+    const editNoteRange = page.locator(
+      '.glass-panel:not(.modal-content):has(select[id^="edit-note-status-"]) input[type="range"]',
+    );
     await expect(editNoteRange).toHaveValue('100');
 
     await page.selectOption('select[id^="edit-note-status-"]', 'todo');
@@ -265,11 +283,16 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
 
     // Move range slider to 100 using React-compatible value setter
     await page.evaluate(() => {
-      const panel = document.querySelector('.glass-panel:not(.modal-content):has(select[id^="edit-note-status-"])');
+      const panel = document.querySelector(
+        '.glass-panel:not(.modal-content):has(select[id^="edit-note-status-"])',
+      );
       const slider = panel?.querySelector('input[type="range"]') as HTMLInputElement;
       const tracker = (slider as any)._valueTracker;
       if (tracker) tracker.setValue('');
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )?.set;
       nativeSetter?.call(slider, '100');
       slider.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -278,11 +301,16 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
 
     // Move range slider to 50 to change status to in_progress
     await page.evaluate(() => {
-      const panel = document.querySelector('.glass-panel:not(.modal-content):has(select[id^="edit-note-status-"])');
+      const panel = document.querySelector(
+        '.glass-panel:not(.modal-content):has(select[id^="edit-note-status-"])',
+      );
       const slider = panel?.querySelector('input[type="range"]') as HTMLInputElement;
       const tracker = (slider as any)._valueTracker;
       if (tracker) tracker.setValue('');
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )?.set;
       nativeSetter?.call(slider, '50');
       slider.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -317,7 +345,9 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.click('button[type="submit"]');
 
     const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
-    await inProgressColumn.locator('.task-card:has-text("E2E Testing Implementation") button:has-text("✏️")').click();
+    await inProgressColumn
+      .locator('.task-card:has-text("E2E Testing Implementation") button:has-text("✏️")')
+      .click();
 
     // Register single invoke mock override for notes failures
     await page.evaluate(() => {
@@ -401,7 +431,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.click('button:has-text("Yes, Delete Project and All Tasks")');
 
     await page.click('button:has-text("Trash Bin")');
-    
+
     // Purge project - dismiss
     expectedMessage = 'WARNING: This will permanently delete this project';
     dialogAction = 'dismiss';
@@ -429,9 +459,9 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
           return {
             projects: [
               { id: 991, name: 'Urgent Project', priority: 2, deleted_at: date2Days },
-              { id: 992, name: 'Warning Project', priority: 1, deleted_at: date8Days }
+              { id: 992, name: 'Warning Project', priority: 1, deleted_at: date8Days },
             ],
-            tasks: []
+            tasks: [],
           };
         }
         return originalInvoke ? originalInvoke(cmd, args) : undefined;
@@ -502,7 +532,9 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
       };
     });
     const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
-    await inProgressColumn.locator('.task-card:has-text("E2E Testing Implementation") button:has-text("✏️")').click();
+    await inProgressColumn
+      .locator('.task-card:has-text("E2E Testing Implementation") button:has-text("✏️")')
+      .click();
     expectedMessage = 'Failed to save task';
     dialogAction = 'accept';
     dialogPromise = page.waitForEvent('dialog');
@@ -557,14 +589,18 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
         return originalInvoke(cmd, args);
       };
     });
-    await inProgressColumn.locator('.task-card:has-text("E2E Testing Implementation") button:has-text("🗑️")').click();
+    await inProgressColumn
+      .locator('.task-card:has-text("E2E Testing Implementation") button:has-text("🗑️")')
+      .click();
 
     // 7. Unarchive & Delete archived failures
     await page.evaluate(() => {
       const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
       (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
         if (cmd === 'get_archived_projects') {
-          return [{ id: 88, name: 'Archived Proj', priority: 1, created_at: new Date().toISOString() }];
+          return [
+            { id: 88, name: 'Archived Proj', priority: 1, created_at: new Date().toISOString() },
+          ];
         }
         if (cmd === 'unarchive_project') {
           throw new Error('Unarchive failed');
@@ -581,7 +617,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     dialogPromise = page.waitForEvent('dialog');
     await page.click('.modal-content button:has-text("Restore Project")');
     await dialogPromise;
-    
+
     await page.click('.modal-content button:has-text("Delete")');
     await page.click('.modal-content button:has-text("Close")');
 
@@ -591,8 +627,17 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
       (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
         if (cmd === 'get_trash_items') {
           return {
-            projects: [{ id: 89, name: 'Trash Proj', priority: 1, deleted_at: new Date().toISOString() }],
-            tasks: [{ id: 90, title: 'Trash Task', project_name: 'Work', deleted_at: new Date().toISOString() }]
+            projects: [
+              { id: 89, name: 'Trash Proj', priority: 1, deleted_at: new Date().toISOString() },
+            ],
+            tasks: [
+              {
+                id: 90,
+                title: 'Trash Task',
+                project_name: 'Work',
+                deleted_at: new Date().toISOString(),
+              },
+            ],
           };
         }
         if (cmd === 'restore_project') {
@@ -611,10 +656,14 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
       };
     });
     await page.click('button:has-text("Trash Bin")');
-    
-    await page.click('.modal-content .glass-panel:has-text("Trash Proj") button:has-text("Restore")');
+
+    await page.click(
+      '.modal-content .glass-panel:has-text("Trash Proj") button:has-text("Restore")',
+    );
     await page.click('.modal-content .glass-panel:has-text("Trash Proj") button:has-text("Purge")');
-    await page.click('.modal-content .glass-panel:has-text("Trash Task") button:has-text("Restore")');
+    await page.click(
+      '.modal-content .glass-panel:has-text("Trash Task") button:has-text("Restore")',
+    );
     await page.click('.modal-content .glass-panel:has-text("Trash Task") button:has-text("Purge")');
 
     await page.click('.modal-content button:has-text("Close")');
@@ -627,7 +676,10 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
 
     const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
 
-    await page.dragAndDrop('.task-card:has-text("Read book chapter")', '.column-card:has-text("In Progress")');
+    await page.dragAndDrop(
+      '.task-card:has-text("Read book chapter")',
+      '.column-card:has-text("In Progress")',
+    );
     await expect(inProgressColumn).toContainText('Read book chapter');
 
     await page.evaluate(() => {
@@ -642,7 +694,10 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     expectedMessage = 'Failed to move task';
     dialogAction = 'accept';
     const dialogPromise = page.waitForEvent('dialog');
-    await page.dragAndDrop('.task-card:has-text("Read book chapter")', '.column-card:has-text("Done")');
+    await page.dragAndDrop(
+      '.task-card:has-text("Read book chapter")',
+      '.column-card:has-text("Done")',
+    );
     await dialogPromise;
   });
 
@@ -653,7 +708,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
 
     await page.click('button:has-text("📅 Weekly Focus")');
     await expect(page.locator('.view-title')).toContainText('Weekly Focus Priorities');
-    
+
     await page.click('button:has-text("Work")');
     await expect(page.locator('.view-title')).toContainText('Work');
 
@@ -672,7 +727,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.click('button:has-text("Daily")');
 
     await page.fill('input[type="date"]', '2026-05-24');
-    
+
     await page.evaluate(() => {
       const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
       (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
@@ -744,8 +799,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
               update_text: 'Logged progress with fallback date',
               completion_percentage: 45,
               status: 'unknown_status',
-              created_at: '2026-05-31 12:00:00'
-            }
+              created_at: '2026-05-31 12:00:00',
+            },
           ];
         }
         return originalInvoke ? originalInvoke(cmd, args) : undefined;

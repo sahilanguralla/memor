@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Project, Task, TaskUpdate, ArchivedProject, TrashResponse } from '../types';
-import { showAlert, showConfirm } from '../utils/dialogs';
+import { Project, Task, TaskUpdate, ArchivedProject, TrashResponse } from '../../domain/types';
+import { showAlert, showConfirm } from '../../shared/utils/dialogs';
+import { DashboardHeader } from './components/DashboardHeader';
+import { DashboardSidebar } from './components/DashboardSidebar';
+import { TaskBoard } from './components/TaskBoard';
+import { DashboardView, TaskStatus } from './types';
+import { getPriorityLabel } from './utils';
 
 interface DashboardProps {
   projects: Project[];
@@ -9,8 +14,6 @@ interface DashboardProps {
   selectedDate: string;
   setSelectedDate: (date: string) => void;
 }
-
-type ActiveView = 'my_day' | 'weekly_focus' | 'project';
 
 const statusLabels: { [key: string]: string } = {
   todo: 'todo',
@@ -24,7 +27,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   selectedDate,
   setSelectedDate,
 }) => {
-  const [activeView, setActiveView] = useState<ActiveView>('my_day');
+  const [activeView, setActiveView] = useState<DashboardView>('my_day');
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
 
   // Modals state
@@ -239,7 +242,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const [taskTitle, setTaskTitle] = useState('');
   const [taskProjectId, setTaskProjectId] = useState<string>('adhoc');
-  const [taskStatus, setTaskStatus] = useState<'todo' | 'in_progress' | 'done'>('todo');
+  const [taskStatus, setTaskStatus] = useState<TaskStatus>('todo');
   const [taskProjectPriority, setTaskProjectPriority] = useState(0);
   const [taskDailyPriority, setTaskDailyPriority] = useState(false);
   const [taskWeeklyPriority, setTaskWeeklyPriority] = useState(false);
@@ -250,13 +253,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [taskNotes, setTaskNotes] = useState<TaskUpdate[]>([]);
   const [newNoteText, setNewNoteText] = useState('');
   const [newNotePercent, setNewNotePercent] = useState(0);
-  const [newNoteStatus, setNewNoteStatus] = useState<'todo' | 'in_progress' | 'done'>('todo');
+  const [newNoteStatus, setNewNoteStatus] = useState<TaskStatus>('todo');
 
   // Note edit state
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [editNoteText, setEditNoteText] = useState('');
   const [editNotePercent, setEditNotePercent] = useState(0);
-  const [editNoteStatus, setEditNoteStatus] = useState<'todo' | 'in_progress' | 'done'>('todo');
+  const [editNoteStatus, setEditNoteStatus] = useState<TaskStatus>('todo');
 
   const todayStr = new Date().toISOString().split('T')[0];
   const isPastDay = selectedDate < todayStr;
@@ -397,7 +400,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     e.dataTransfer.setData('text/plain', taskId.toString());
   };
 
-  const handleDrop = async (e: React.DragEvent, targetStatus: 'todo' | 'in_progress' | 'done') => {
+  const handleDrop = async (e: React.DragEvent, targetStatus: TaskStatus) => {
     e.preventDefault();
     const taskId = Number(e.dataTransfer.getData('text/plain'));
     if (!taskId) return;
@@ -474,17 +477,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const currentTasks = getFilteredTasks();
-
-  const getPriorityLabel = (priority: number) => {
-    switch (priority) {
-      case 2:
-        return { text: 'High', className: 'high' };
-      case 1:
-        return { text: 'Med', className: 'med' };
-      default:
-        return { text: 'Low', className: 'low' };
-    }
-  };
 
   // Note actions
   const handleAddNote = async (e: React.FormEvent) => {
@@ -566,106 +558,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="dashboard-container">
-      {/* Sidebar */}
-      <div className="sidebar">
-        <div className="sidebar-header">
-          <span>Smart Views</span>
-        </div>
-        <div style={{ padding: '0 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <button
-            type="button"
-            className={`project-item ${activeView === 'my_day' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveView('my_day');
-              setSelectedProjectId(null);
-            }}
-          >
-            <span>☀️ My Day</span>
-          </button>
-          <button
-            type="button"
-            className={`project-item ${activeView === 'weekly_focus' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveView('weekly_focus');
-              setSelectedProjectId(null);
-            }}
-          >
-            <span>📅 Weekly Focus</span>
-          </button>
-        </div>
-
-        <div className="sidebar-header" style={{ marginTop: '16px' }}>
-          <span>Projects</span>
-          <button
-            type="button"
-            onClick={() => setShowProjectModal(true)}
-            className="action-btn"
-            style={{ fontSize: '16px' }}
-          >
-            +
-          </button>
-        </div>
-        <div className="project-list">
-          {projects.map((p) => (
-            <button
-              type="button"
-              key={p.project_id ?? 'adhoc'}
-              className={`project-item ${activeView === 'project' && selectedProjectId === p.project_id ? 'active' : ''}`}
-              onClick={() => {
-                setActiveView('project');
-                setSelectedProjectId(p.project_id);
-              }}
-            >
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {p.project_id === null ? '📦 ' : '📂 '}
-                {p.project_name}
-              </span>
-              {p.project_id !== null && (
-                <span className={`project-badge ${getPriorityLabel(p.project_priority).className}`}>
-                  {getPriorityLabel(p.project_priority).text}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Sidebar Management Footer */}
-        <div
-          className="sidebar-header"
-          style={{
-            marginTop: 'auto',
-            borderTop: '1px solid var(--panel-border)',
-            paddingTop: '12px',
-          }}
-        >
-          <span>Management</span>
-        </div>
-        <div
-          style={{
-            padding: '0 12px 16px 12px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '4px',
-          }}
-        >
-          <button
-            type="button"
-            className="project-item"
-            onClick={() => setShowArchivedModal(true)}
-            style={{ color: 'var(--text-med)' }}
-          >
-            <span>📁 Archived Projects</span>
-          </button>
-          <button
-            type="button"
-            className="project-item"
-            onClick={() => setShowTrashModal(true)}
-            style={{ color: 'var(--text-med)' }}
-          >
-            <span>🗑️ Trash Bin</span>
-          </button>
-        </div>
-      </div>
+      <DashboardSidebar
+        activeView={activeView}
+        onOpenArchived={() => setShowArchivedModal(true)}
+        onOpenCreateProject={() => setShowProjectModal(true)}
+        onOpenTrash={() => setShowTrashModal(true)}
+        onSelectProject={(projectId) => {
+          setActiveView('project');
+          setSelectedProjectId(projectId);
+        }}
+        onSelectView={(view) => {
+          setActiveView(view);
+          setSelectedProjectId(null);
+        }}
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+      />
 
       {/* Main Board */}
       <div className="dashboard-view">
@@ -698,408 +606,32 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         )}
 
-        <div className="view-header">
-          <div>
-            <h2
-              className="view-title"
-              style={{ display: 'flex', alignItems: 'center', gap: '10px' }}
-            >
-              {activeView === 'my_day' && '☀️ My Day Priorities'}
-              {activeView === 'weekly_focus' && '📅 Weekly Focus Priorities'}
-              {activeView === 'project' && (
-                <>
-                  📂{' '}
-                  {projects.find((p) => p.project_id === selectedProjectId)?.project_name ||
-                    'Project'}
-                  {selectedProjectId !== null && (
-                    <div style={{ display: 'inline-flex', gap: '8px', marginLeft: '12px' }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => handleArchiveActiveProject(selectedProjectId)}
-                        style={{ padding: '4px 8px', fontSize: '12px' }}
-                        title="Archive Project"
-                      >
-                        📥 Archive
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => handleDeleteActiveProject(selectedProjectId)}
-                        style={{
-                          padding: '4px 8px',
-                          fontSize: '12px',
-                          borderColor: 'rgba(239, 68, 68, 0.2)',
-                          color: '#ef4444',
-                        }}
-                        title="Delete Project"
-                      >
-                        🗑️ Delete
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </h2>
-            <p style={{ color: 'var(--text-med)', fontSize: '14px', marginTop: '4px' }}>
-              {activeView === 'my_day' && "Tasks you've flagged to focus on today"}
-              {activeView === 'weekly_focus' && 'Major initiatives for the current week'}
-              {activeView === 'project' && 'Manage tasks in this project'}
-            </p>
-          </div>
+        <DashboardHeader
+          activeView={activeView}
+          onAddTask={() => {
+            setEditingTask(null);
+            setShowTaskModal(true);
+          }}
+          onArchiveProject={handleArchiveActiveProject}
+          onDateChange={setSelectedDate}
+          onDeleteProject={handleDeleteActiveProject}
+          onOpenPlanTomorrow={() => setShowPlanTomorrowModal(true)}
+          onShiftDate={adjustDate}
+          projects={projects}
+          selectedDate={selectedDate}
+          selectedProjectId={selectedProjectId}
+        />
 
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                background: 'rgba(255, 255, 255, 0.05)',
-                borderRadius: '8px',
-                border: '1px solid var(--glass-border)',
-                padding: '2px',
-              }}
-            >
-              <button
-                type="button"
-                className="action-btn"
-                onClick={() => adjustDate(-1)}
-                title="Previous Day"
-                style={{ padding: '6px 10px', fontSize: '14px', color: 'var(--text-high)' }}
-              >
-                ◀
-              </button>
-              <input
-                type="date"
-                className="form-input"
-                value={selectedDate}
-                onChange={(e) => {
-                  setSelectedDate(e.target.value);
-                  e.target.blur();
-                }}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  padding: '4px 8px',
-                  fontSize: '14px',
-                  color: 'var(--text-high)',
-                  outline: 'none',
-                }}
-              />
-              <button
-                type="button"
-                className="action-btn"
-                onClick={() => adjustDate(1)}
-                title="Next Day"
-                style={{ padding: '6px 10px', fontSize: '14px', color: 'var(--text-high)' }}
-              >
-                ▶
-              </button>
-            </div>
-            {activeView === 'my_day' && (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setShowPlanTomorrowModal(true)}
-                style={{
-                  background: 'rgba(99, 102, 241, 0.1)',
-                  color: '#a5b4fc',
-                  borderColor: 'rgba(99, 102, 241, 0.2)',
-                }}
-              >
-                🔮 Plan Tomorrow
-              </button>
-            )}
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {
-                setEditingTask(null);
-                setShowTaskModal(true);
-              }}
-            >
-              + Add Task
-            </button>
-          </div>
-        </div>
-
-        {/* Board Columns */}
-        <div className="board-columns">
-          {/* NEEDS TO DO COLUMN */}
-          <div
-            className="column-card"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => handleDrop(e, 'todo')}
-          >
-            <div className="column-header">
-              <div className="column-title">
-                <span style={{ color: 'var(--warn)' }}>●</span> On My Plate
-              </div>
-              <span className="column-count">{currentTasks.needs_to_do.length}</span>
-            </div>
-            <div className="column-body">
-              {currentTasks.needs_to_do.map((task) => (
-                <div
-                  key={task.task_id}
-                  className="task-card"
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, task.task_id)}
-                >
-                  <div className="task-title">{task.title}</div>
-
-                  {/* Progress Indicator */}
-                  <div style={{ marginTop: '4px' }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontSize: '10px',
-                        color: 'var(--text-low)',
-                        marginBottom: '2px',
-                      }}
-                    >
-                      <span>Progress</span>
-                      <span>{task.completion_percentage}%</span>
-                    </div>
-                    <div
-                      style={{
-                        height: '4px',
-                        background: 'rgba(255,255,255,0.06)',
-                        borderRadius: '2px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${task.completion_percentage}%`,
-                          height: '100%',
-                          background: 'var(--primary)',
-                          transition: 'width 0.2s ease',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="task-footer">
-                    <div className="task-badges">
-                      <span
-                        className={`task-badge ${getPriorityLabel(task.project_priority).className}`}
-                      >
-                        {getPriorityLabel(task.project_priority).text}
-                      </span>
-                      {task.is_daily_priority && <span className="task-badge daily">Day</span>}
-                      {task.is_weekly_priority && <span className="task-badge weekly">Week</span>}
-                    </div>
-                    <div className="task-actions">
-                      <button
-                        type="button"
-                        className="action-btn"
-                        onClick={() => {
-                          setEditingTask(task);
-                          setShowTaskModal(true);
-                        }}
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        type="button"
-                        className="action-btn delete"
-                        onClick={() => handleDeleteTask(task.task_id)}
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ON MY PLATE COLUMN */}
-          <div
-            className="column-card"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => handleDrop(e, 'in_progress')}
-          >
-            <div className="column-header">
-              <div className="column-title">
-                <span style={{ color: 'var(--primary)' }}>●</span> In Progress
-              </div>
-              <span className="column-count">{currentTasks.on_my_plate.length}</span>
-            </div>
-            <div className="column-body">
-              {currentTasks.on_my_plate.map((task) => (
-                <div
-                  key={task.task_id}
-                  className="task-card"
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, task.task_id)}
-                >
-                  <div className="task-title">{task.title}</div>
-
-                  {/* Progress Indicator */}
-                  <div style={{ marginTop: '4px' }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontSize: '10px',
-                        color: 'var(--text-low)',
-                        marginBottom: '2px',
-                      }}
-                    >
-                      <span>Progress</span>
-                      <span>{task.completion_percentage}%</span>
-                    </div>
-                    <div
-                      style={{
-                        height: '4px',
-                        background: 'rgba(255,255,255,0.06)',
-                        borderRadius: '2px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${task.completion_percentage}%`,
-                          height: '100%',
-                          background: 'var(--primary)',
-                          transition: 'width 0.2s ease',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="task-footer">
-                    <div className="task-badges">
-                      <span
-                        className={`task-badge ${getPriorityLabel(task.project_priority).className}`}
-                      >
-                        {getPriorityLabel(task.project_priority).text}
-                      </span>
-                      {task.is_daily_priority && <span className="task-badge daily">Day</span>}
-                      {task.is_weekly_priority && <span className="task-badge weekly">Week</span>}
-                    </div>
-                    <div className="task-actions">
-                      <button
-                        type="button"
-                        className="action-btn"
-                        onClick={() => {
-                          setEditingTask(task);
-                          setShowTaskModal(true);
-                        }}
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        type="button"
-                        className="action-btn delete"
-                        onClick={() => handleDeleteTask(task.task_id)}
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* DONE COLUMN */}
-          <div
-            className="column-card"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => handleDrop(e, 'done')}
-          >
-            <div className="column-header">
-              <div className="column-title">
-                <span style={{ color: 'var(--accent)' }}>●</span> Done
-              </div>
-              <span className="column-count">{currentTasks.done.length}</span>
-            </div>
-            <div className="column-body">
-              {currentTasks.done.map((task) => (
-                <div
-                  key={task.task_id}
-                  className="task-card"
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, task.task_id)}
-                  style={{ opacity: 0.7 }}
-                >
-                  <div
-                    className="task-title"
-                    style={{ textDecoration: 'line-through', color: 'var(--text-low)' }}
-                  >
-                    {task.title}
-                  </div>
-
-                  {/* Progress Indicator */}
-                  <div style={{ marginTop: '4px' }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontSize: '10px',
-                        color: 'var(--text-low)',
-                        marginBottom: '2px',
-                      }}
-                    >
-                      <span>Progress</span>
-                      <span>{task.completion_percentage}%</span>
-                    </div>
-                    <div
-                      style={{
-                        height: '4px',
-                        background: 'rgba(255,255,255,0.06)',
-                        borderRadius: '2px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${task.completion_percentage}%`,
-                          height: '100%',
-                          background: 'var(--accent)',
-                          transition: 'width 0.2s ease',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="task-footer">
-                    <div className="task-badges">
-                      <span
-                        className={`task-badge ${getPriorityLabel(task.project_priority).className}`}
-                      >
-                        {getPriorityLabel(task.project_priority).text}
-                      </span>
-                      {task.is_daily_priority && <span className="task-badge daily">Day</span>}
-                      {task.is_weekly_priority && <span className="task-badge weekly">Week</span>}
-                    </div>
-                    <div className="task-actions">
-                      <button
-                        type="button"
-                        className="action-btn"
-                        onClick={() => {
-                          setEditingTask(task);
-                          setShowTaskModal(true);
-                        }}
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        type="button"
-                        className="action-btn delete"
-                        onClick={() => handleDeleteTask(task.task_id)}
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <TaskBoard
+          onDeleteTask={handleDeleteTask}
+          onDropTask={handleDrop}
+          onEditTask={(task) => {
+            setEditingTask(task);
+            setShowTaskModal(true);
+          }}
+          onTaskDragStart={handleDragStart}
+          tasks={currentTasks}
+        />
       </div>
 
       {/* CREATE PROJECT MODAL */}
