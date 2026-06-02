@@ -1,5 +1,16 @@
 import { test, expect } from '../../test/e2e/fixtures';
 
+const visibleModal = (page: import('@playwright/test').Page) => page.locator('.ui.modal:visible');
+
+const sidebarItem = (page: import('@playwright/test').Page, text: string) =>
+  page.locator('.app-sidebar .item').filter({ hasText: text }).first();
+
+const taskAction = (
+  parent: import('@playwright/test').Locator,
+  taskTitle: string,
+  action: 'edit' | 'delete',
+) => parent.locator(`.task-card:has-text("${taskTitle}") button`).nth(action === 'edit' ? 0 : 1);
+
 test.describe('Memor E2E Coverage Expansion Suite', () => {
   let dialogAction: 'accept' | 'dismiss' | 'default' = 'default';
   let expectedMessage: string | null = null;
@@ -47,7 +58,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
       };
     });
     await page.goto('/');
-    await expect(page.locator('.brand h1')).toHaveText('Memor');
+    await expect(page.getByRole('button', { name: 'Dashboard' })).toBeVisible();
 
     // 2. Auto unlock error handling and empty password validation
     await page.goto('/');
@@ -67,7 +78,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await expect(page.locator('.lock-card h2')).toHaveText('Memor Decryption');
     // Click submit with empty password
     await page.click('button[type="submit"]');
-    await expect(page.locator('.lock-error')).toHaveText('Please enter a master password.');
+    await expect(page.locator('.lock-error')).toContainText('Please enter a master password.');
   });
 
   test('Lock Screen - First Run setup flows', async ({ page }) => {
@@ -89,15 +100,15 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.fill('#master-password', 'pass123');
     await page.fill('#confirm-password', 'pass456');
     await page.click('button[type="submit"]');
-    await expect(page.locator('.lock-error')).toHaveText('Passwords do not match.');
+    await expect(page.locator('.lock-error')).toContainText('Passwords do not match.');
 
     // Correct passwords matching
     await page.fill('#master-password', 'password123');
     await page.fill('#confirm-password', 'password123');
-    await page.check('#keyring-checkbox');
+    await page.locator('.ui.checkbox:has(#keyring-checkbox)').click();
     await page.click('button[type="submit"]');
 
-    await expect(page.locator('.brand h1')).toHaveText('Memor');
+    await expect(page.getByRole('button', { name: 'Dashboard' })).toBeVisible();
   });
 
   test('Settings & Idle Timer Coverage', async ({ page }) => {
@@ -170,15 +181,15 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.click('button[type="submit"]');
 
     await page.click('button:has-text("Dashboard")');
-    await page.click('button:has-text("☀️ My Day")');
+    await sidebarItem(page, 'My Day').click();
 
     await page.click('button:has-text("Plan Tomorrow")');
-    await expect(page.locator('.modal-content h3')).toContainText("Plan Tomorrow's Carry-Over");
-    await expect(page.locator('.modal-content')).toContainText('E2E Testing Implementation');
+    await expect(visibleModal(page).locator('h3')).toContainText("Plan Tomorrow's Carry-Over");
+    await expect(visibleModal(page)).toContainText('E2E Testing Implementation');
 
     // Uncheck and check carry over
-    await page.uncheck('.modal-content input[type="checkbox"]');
-    await page.check('.modal-content input[type="checkbox"]');
+    await visibleModal(page).locator('.ui.checkbox').first().click();
+    await visibleModal(page).locator('.ui.checkbox').first().click();
 
     // Toggle carry over error alert
     await page.evaluate(() => {
@@ -194,27 +205,23 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     dialogAction = 'accept';
     const dialogPromise = page.waitForEvent('dialog');
     // Use page.click instead of page.uncheck since controlled state doesn't change on failure
-    await page.click('.modal-content input[type="checkbox"]');
+    await visibleModal(page).locator('.ui.checkbox').first().click();
     await dialogPromise;
 
-    await page.click('.modal-content button:has-text("Close")');
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
 
     // Plan Tomorrow empty carry-over state (delete uncompleted tasks to empty it)
     const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
-    await inProgressColumn
-      .locator('.task-card:has-text("E2E Testing Implementation") button:has-text("🗑️")')
-      .click();
+    await taskAction(inProgressColumn, 'E2E Testing Implementation', 'delete').click();
 
     const todoColumn = page.locator('.column-card:has-text("On My Plate")');
-    await todoColumn
-      .locator('.task-card:has-text("Read book chapter") button:has-text("🗑️")')
-      .click();
+    await taskAction(todoColumn, 'Read book chapter', 'delete').click();
 
     await page.click('button:has-text("Plan Tomorrow")');
-    await expect(page.locator('.modal-content')).toContainText(
+    await expect(visibleModal(page)).toContainText(
       'No uncompleted priorities on your day to plan!',
     );
-    await page.click('.modal-content button:has-text("Close")');
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
   });
 
   test('Task note status/percent synchronization and inline note CRUD', async ({ page }) => {
@@ -223,9 +230,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.click('button[type="submit"]');
 
     const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
-    await inProgressColumn
-      .locator('.task-card:has-text("E2E Testing Implementation") button:has-text("✏️")')
-      .click();
+    await taskAction(inProgressColumn, 'E2E Testing Implementation', 'edit').click();
 
     // Done status synchronizes percent to 100
     await page.selectOption('#new-note-status-select', 'done');
@@ -265,16 +270,19 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await expect(page.locator('#new-note-status-select')).toHaveValue('in_progress');
 
     // Inline note CRUD
-    await page.click('.modal-content .glass-panel button:has-text("✏️")');
-    const editNotePanel = page.locator(
-      '.modal-content .glass-panel:has(select[id^="edit-note-status-"])',
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Started implementing playwright scripts") button')
+      .first()
+      .click();
+    const editNotePanel = visibleModal(page).locator(
+      '.glass-panel:has(select[id^="edit-note-status-"])',
     );
     await editNotePanel.locator('input[type="text"]').fill('Updated inline note text');
 
     // Status sync inside inline note edit
     await page.selectOption('select[id^="edit-note-status-"]', 'done');
-    const editNoteRange = page.locator(
-      '.glass-panel:not(.modal-content):has(select[id^="edit-note-status-"]) input[type="range"]',
+    const editNoteRange = visibleModal(page).locator(
+      '.glass-panel:has(select[id^="edit-note-status-"]) input[type="range"]',
     );
     await expect(editNoteRange).toHaveValue('100');
 
@@ -284,7 +292,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     // Move range slider to 100 using React-compatible value setter
     await page.evaluate(() => {
       const panel = document.querySelector(
-        '.glass-panel:not(.modal-content):has(select[id^="edit-note-status-"])',
+        '.ui.modal .glass-panel:has(select[id^="edit-note-status-"])',
       );
       const slider = panel?.querySelector('input[type="range"]') as HTMLInputElement;
       const tracker = (slider as any)._valueTracker;
@@ -302,7 +310,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     // Move range slider to 50 to change status to in_progress
     await page.evaluate(() => {
       const panel = document.querySelector(
-        '.glass-panel:not(.modal-content):has(select[id^="edit-note-status-"])',
+        '.ui.modal .glass-panel:has(select[id^="edit-note-status-"])',
       );
       const slider = panel?.querySelector('input[type="range"]') as HTMLInputElement;
       const tracker = (slider as any)._valueTracker;
@@ -317,26 +325,35 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await expect(page.locator('select[id^="edit-note-status-"]')).toHaveValue('in_progress');
 
     // Save
-    await page.click('.modal-content .glass-panel button:has-text("Save")');
-    await expect(page.locator('.modal-content')).toContainText('Updated inline note text');
+    await visibleModal(page).getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(visibleModal(page)).toContainText('Updated inline note text');
 
     // Cancel inline note edit
-    await page.click('.modal-content .glass-panel button:has-text("✏️")');
-    await page.click('.modal-content .glass-panel button:has-text("Cancel")');
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Updated inline note text") button')
+      .first()
+      .click();
+    await editNotePanel.getByRole('button', { name: 'Cancel' }).click();
 
     // Dismiss note deletion prompt
     expectedMessage = 'Are you sure you want to delete this note?';
     dialogAction = 'dismiss';
-    await page.click('.modal-content .glass-panel button:has-text("🗑️")');
-    await expect(page.locator('.modal-content')).toContainText('Updated inline note text');
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Updated inline note text") button')
+      .nth(1)
+      .click();
+    await expect(visibleModal(page)).toContainText('Updated inline note text');
 
     // Accept note deletion
     expectedMessage = 'Are you sure you want to delete this note?';
     dialogAction = 'accept';
-    await page.click('.modal-content .glass-panel button:has-text("🗑️")');
-    await expect(page.locator('.modal-content')).toContainText('No progress logs recorded.');
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Updated inline note text") button')
+      .nth(1)
+      .click();
+    await expect(visibleModal(page)).toContainText('No progress logs recorded.');
 
-    await page.click('.modal-content button:has-text("Cancel")');
+    await visibleModal(page).getByRole('button', { name: 'Cancel' }).first().click();
   });
 
   test('Task note actions - error alerts', async ({ page }) => {
@@ -345,9 +362,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.click('button[type="submit"]');
 
     const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
-    await inProgressColumn
-      .locator('.task-card:has-text("E2E Testing Implementation") button:has-text("✏️")')
-      .click();
+    await taskAction(inProgressColumn, 'E2E Testing Implementation', 'edit').click();
 
     // Register single invoke mock override for notes failures
     await page.evaluate(() => {
@@ -375,23 +390,34 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await dialogPromise;
 
     // 2. Edit note fail alert
-    await page.click('.modal-content .glass-panel button:has-text("✏️")');
-    await page.fill('.modal-content .glass-panel input[type="text"]', 'Fail note edit content');
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Started implementing playwright scripts") button')
+      .first()
+      .click();
+    await visibleModal(page)
+      .locator('.glass-panel:has(select[id^="edit-note-status-"]) input[type="text"]')
+      .fill('Fail note edit content');
     expectedMessage = 'Failed to update note';
     dialogAction = 'accept';
     dialogPromise = page.waitForEvent('dialog');
-    await page.click('.modal-content .glass-panel button:has-text("Save")');
+    await visibleModal(page).getByRole('button', { name: 'Save', exact: true }).click();
     await dialogPromise;
 
     // Cancel edit mode to return the list item to view mode, re-enabling the delete button
-    await page.click('.modal-content .glass-panel button:has-text("Cancel")');
+    await visibleModal(page)
+      .locator('.glass-panel:has(select[id^="edit-note-status-"])')
+      .getByRole('button', { name: 'Cancel' })
+      .click();
 
     // 3. Delete note fail alert
     dialogPromise = page.waitForEvent('dialog');
-    await page.click('.modal-content .glass-panel button:has-text("🗑️")');
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Started implementing playwright scripts") button')
+      .nth(1)
+      .click();
     await dialogPromise;
 
-    await page.click('.modal-content button:has-text("Cancel")');
+    await visibleModal(page).getByRole('button', { name: 'Cancel' }).first().click();
   });
 
   test('Project deletion options and Trash Bin restoration/purging', async ({ page }) => {
@@ -400,7 +426,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.click('button[type="submit"]');
 
     // Select Personal project
-    await page.click('button:has-text("Personal")');
+    await sidebarItem(page, 'Personal').click();
 
     // Click delete project button
     await page.click('button[title="Delete Project"]');
@@ -417,34 +443,40 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await expect(page.locator('.project-list')).not.toContainText('Personal');
 
     // 3. Trash Bin - Restore Project
-    await page.click('button:has-text("Trash Bin")');
-    await expect(page.locator('.modal-content')).toContainText('Personal');
+    await sidebarItem(page, 'Trash Bin').click();
+    await expect(visibleModal(page)).toContainText('Personal');
 
-    await page.click('.modal-content .glass-panel:has-text("Personal") button:has-text("Restore")');
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Personal") button:has-text("Restore")')
+      .click();
 
-    await page.click('.modal-content button:has-text("Close")');
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
     await expect(page.locator('.project-list')).toContainText('Personal');
 
     // 4. Trash Bin - Purge Project
-    await page.click('button:has-text("Personal")');
+    await sidebarItem(page, 'Personal').click();
     await page.click('button[title="Delete Project"]');
-    await page.click('button:has-text("Yes, Delete Project and All Tasks")');
+    await page.click('button:has-text("Yes, Delete Project and Tasks")');
 
-    await page.click('button:has-text("Trash Bin")');
+    await sidebarItem(page, 'Trash Bin').click();
 
     // Purge project - dismiss
     expectedMessage = 'WARNING: This will permanently delete this project';
     dialogAction = 'dismiss';
-    await page.click('.modal-content .glass-panel:has-text("Personal") button:has-text("Purge")');
-    await expect(page.locator('.modal-content')).toContainText('Personal');
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Personal") button:has-text("Purge")')
+      .click();
+    await expect(visibleModal(page)).toContainText('Personal');
 
     // Purge project - accept
     expectedMessage = 'WARNING: This will permanently delete this project';
     dialogAction = 'accept';
-    await page.click('.modal-content .glass-panel:has-text("Personal") button:has-text("Purge")');
-    await expect(page.locator('.modal-content')).not.toContainText('Personal');
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Personal") button:has-text("Purge")')
+      .click();
+    await expect(visibleModal(page)).not.toContainText('Personal');
 
-    await page.click('.modal-content button:has-text("Close")');
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
   });
 
   test('Trash items remaining days styling', async ({ page }) => {
@@ -472,10 +504,10 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.fill('#master-password', 'password123');
     await page.click('button[type="submit"]');
 
-    await page.click('button:has-text("Trash Bin")');
-    await expect(page.locator('.modal-content')).toContainText('2 days left');
-    await expect(page.locator('.modal-content')).toContainText('8 days left');
-    await page.click('.modal-content button:has-text("Close")');
+    await sidebarItem(page, 'Trash Bin').click();
+    await expect(visibleModal(page)).toContainText('2 days left');
+    await expect(visibleModal(page)).toContainText('8 days left');
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
   });
 
   test('Dashboard operations - failure alerts', async ({ page }) => {
@@ -493,14 +525,14 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
         return originalInvoke(cmd, args);
       };
     });
-    await page.locator('.sidebar-header button').first().click();
+    await page.locator('.sidebar-header button:visible').first().click();
     await page.fill('#p-name', 'Error Project');
     expectedMessage = 'Failed to create project';
     dialogAction = 'accept';
     let dialogPromise = page.waitForEvent('dialog');
     await page.click('button:has-text("Create Project")');
     await dialogPromise;
-    await page.click('.modal-content button:has-text("Cancel")');
+    await visibleModal(page).getByRole('button', { name: 'Cancel' }).click();
 
     // 2. Create task failure
     await page.evaluate(() => {
@@ -512,14 +544,14 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
         return originalInvoke(cmd, args);
       };
     });
-    await page.click('button:has-text("+ Add Task")');
+    await page.click('button:has-text("Add Task")');
     await page.fill('#t-title', 'Error Task');
     expectedMessage = 'Failed to save task';
     dialogAction = 'accept';
     dialogPromise = page.waitForEvent('dialog');
     await page.click('button[type="submit"]');
     await dialogPromise;
-    await page.click('.modal-content button:has-text("Cancel")');
+    await visibleModal(page).getByRole('button', { name: 'Cancel' }).click();
 
     // 3. Save task edit failure
     await page.evaluate(() => {
@@ -532,15 +564,13 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
       };
     });
     const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
-    await inProgressColumn
-      .locator('.task-card:has-text("E2E Testing Implementation") button:has-text("✏️")')
-      .click();
+    await taskAction(inProgressColumn, 'E2E Testing Implementation', 'edit').click();
     expectedMessage = 'Failed to save task';
     dialogAction = 'accept';
     dialogPromise = page.waitForEvent('dialog');
     await page.click('button[type="submit"]');
     await dialogPromise;
-    await page.click('.modal-content button:has-text("Cancel")');
+    await visibleModal(page).getByRole('button', { name: 'Cancel' }).click();
 
     // 4. Archive project failure
     await page.evaluate(() => {
@@ -552,7 +582,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
         return originalInvoke(cmd, args);
       };
     });
-    await page.click('button:has-text("Work")');
+    await sidebarItem(page, 'Work').click();
     expectedMessage = 'Failed to archive project';
     dialogAction = 'accept';
     dialogPromise = page.waitForEvent('dialog');
@@ -573,11 +603,14 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     expectedMessage = 'Failed to delete project';
     dialogAction = 'accept';
     dialogPromise = page.waitForEvent('dialog');
-    await page.click('button:has-text("Yes, Delete Project and All Tasks")');
+    await page.click('button:has-text("Yes, Delete Project and Tasks")');
     await dialogPromise;
 
     // Close the delete project modal
-    await page.click('.modal-content:has-text("delete all tasks") button:has-text("Cancel")');
+    await visibleModal(page)
+      .filter({ hasText: 'delete all tasks' })
+      .getByRole('button', { name: 'Cancel' })
+      .click();
 
     // 6. Delete task failure
     await page.evaluate(() => {
@@ -589,9 +622,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
         return originalInvoke(cmd, args);
       };
     });
-    await inProgressColumn
-      .locator('.task-card:has-text("E2E Testing Implementation") button:has-text("🗑️")')
-      .click();
+    await taskAction(inProgressColumn, 'E2E Testing Implementation', 'delete').click();
 
     // 7. Unarchive & Delete archived failures
     await page.evaluate(() => {
@@ -611,15 +642,15 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
         return originalInvoke(cmd, args);
       };
     });
-    await page.click('button:has-text("Archived Projects")');
+    await sidebarItem(page, 'Archived Projects').click();
     expectedMessage = 'Failed to unarchive project';
     dialogAction = 'accept';
     dialogPromise = page.waitForEvent('dialog');
-    await page.click('.modal-content button:has-text("Restore Project")');
+    await visibleModal(page).getByRole('button', { name: 'Restore Project' }).click();
     await dialogPromise;
 
-    await page.click('.modal-content button:has-text("Delete")');
-    await page.click('.modal-content button:has-text("Close")');
+    await visibleModal(page).getByRole('button', { name: 'Delete' }).click();
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
 
     // 8. Trash restoration & purging failures
     await page.evaluate(() => {
@@ -655,18 +686,22 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
         return originalInvoke(cmd, args);
       };
     });
-    await page.click('button:has-text("Trash Bin")');
+    await sidebarItem(page, 'Trash Bin').click();
 
-    await page.click(
-      '.modal-content .glass-panel:has-text("Trash Proj") button:has-text("Restore")',
-    );
-    await page.click('.modal-content .glass-panel:has-text("Trash Proj") button:has-text("Purge")');
-    await page.click(
-      '.modal-content .glass-panel:has-text("Trash Task") button:has-text("Restore")',
-    );
-    await page.click('.modal-content .glass-panel:has-text("Trash Task") button:has-text("Purge")');
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Trash Proj") button:has-text("Restore")')
+      .click();
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Trash Proj") button:has-text("Purge")')
+      .click();
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Trash Task") button:has-text("Restore")')
+      .click();
+    await visibleModal(page)
+      .locator('.glass-panel:has-text("Trash Task") button:has-text("Purge")')
+      .click();
 
-    await page.click('.modal-content button:has-text("Close")');
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
   });
 
   test('Task drag and drop and drop failure alert', async ({ page }) => {
@@ -706,10 +741,10 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.fill('#master-password', 'password123');
     await page.click('button[type="submit"]');
 
-    await page.click('button:has-text("📅 Weekly Focus")');
+    await sidebarItem(page, 'Weekly Focus').click();
     await expect(page.locator('.view-title')).toContainText('Weekly Focus Priorities');
 
-    await page.click('button:has-text("Work")');
+    await sidebarItem(page, 'Work').click();
     await expect(page.locator('.view-title')).toContainText('Work');
 
     await page.click('button[title="Previous Day"]');
@@ -738,7 +773,7 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
       };
     });
     await page.click('button:has-text("Weekly")');
-    await expect(page.locator('.lock-error')).toContainText('Summary retrieval failed');
+    await expect(page.locator('.ui.negative.message')).toContainText('Summary retrieval failed');
   });
 
   test('Timeline View re-fetch on background event and errors', async ({ page }) => {
@@ -827,6 +862,6 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     });
     await page.click('button:has-text("Dashboard")');
     await page.click('button:has-text("Activity")');
-    await expect(page.locator('.lock-error')).toContainText('Timeline fetch failed');
+    await expect(page.locator('.ui.negative.message')).toContainText('Timeline fetch failed');
   });
 });

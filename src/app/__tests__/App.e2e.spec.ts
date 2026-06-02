@@ -1,5 +1,16 @@
 import { test, expect } from '../../test/e2e/fixtures';
 
+const visibleModal = (page: import('@playwright/test').Page) => page.locator('.ui.modal:visible');
+
+const sidebarItem = (page: import('@playwright/test').Page, text: string) =>
+  page.locator('.app-sidebar .item').filter({ hasText: text }).first();
+
+const taskAction = (
+  parent: import('@playwright/test').Locator,
+  taskTitle: string,
+  action: 'edit' | 'delete',
+) => parent.locator(`.task-card:has-text("${taskTitle}") button`).nth(action === 'edit' ? 0 : 1);
+
 test.describe('Memor E2E Test Suite', () => {
   test.beforeEach(async ({ page }) => {
     // Automatically accept all dialog alerts and confirmations (e.g. task deletions)
@@ -34,8 +45,7 @@ test.describe('Memor E2E Test Suite', () => {
     await page.click('button[type="submit"]');
 
     // Verify redirect to Dashboard
-    await expect(page.locator('.brand h1')).toHaveText('Memor');
-    await expect(page.getByRole('button', { name: '📋 Dashboard' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Dashboard' })).toBeVisible();
   });
 
   test('Tab Navigation', async ({ page }) => {
@@ -66,7 +76,7 @@ test.describe('Memor E2E Test Suite', () => {
     await page.click('button[type="submit"]');
 
     // 1. Create a Project
-    await page.locator('.sidebar-header button').click(); // Click '+'
+    await page.locator('.sidebar-header button:visible').click(); // Click '+'
     await page.fill('#p-name', 'Vacation Planning');
     await page.selectOption('#p-priority', '2'); // High Priority
     await page.click('button:has-text("Create Project")');
@@ -75,30 +85,30 @@ test.describe('Memor E2E Test Suite', () => {
     await expect(page.locator('.project-list')).toContainText('Vacation Planning');
 
     // 2. Archive the Project
-    await page.click('button:has-text("Vacation Planning")');
+    await sidebarItem(page, 'Vacation Planning').click();
     await page.click('button[title="Archive Project"]'); // Click Archive button in project header
 
     // Verify project disappears from sidebar
     await expect(page.locator('.project-list')).not.toContainText('Vacation Planning');
 
     // Verify project is in Archived list
-    await page.click('button:has-text("Archived Projects")');
-    await expect(page.locator('.modal-content h3')).toHaveText('📁 Archived Projects');
-    await expect(page.locator('.modal-content')).toContainText('Vacation Planning');
+    await sidebarItem(page, 'Archived Projects').click();
+    await expect(visibleModal(page).locator('h3')).toHaveText('📁 Archived Projects');
+    await expect(visibleModal(page)).toContainText('Vacation Planning');
 
     // 3. Restore the Project
-    await page.click('.modal-content button:has-text("Restore Project")');
-    await page.click('.modal-content button:has-text("Close")');
+    await visibleModal(page).getByRole('button', { name: 'Restore Project' }).click();
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
 
     // Verify project is back in sidebar
     await expect(page.locator('.project-list')).toContainText('Vacation Planning');
 
     // 4. Delete the Project
-    await page.click('button:has-text("Vacation Planning")');
+    await sidebarItem(page, 'Vacation Planning').click();
     await page.click('button[title="Delete Project"]'); // Click Delete button in project header
 
     // Confirm delete in modal
-    await page.click('button:has-text("Yes, Delete Project and All Tasks")');
+    await page.click('button:has-text("Yes, Delete Project and Tasks")');
 
     // Verify project is permanently gone from sidebar
     await expect(page.locator('.project-list')).not.toContainText('Vacation Planning');
@@ -110,13 +120,13 @@ test.describe('Memor E2E Test Suite', () => {
     await page.click('button[type="submit"]');
 
     // Select "Work" project
-    await page.click('button:has-text("Work")');
+    await sidebarItem(page, 'Work').click();
 
     // 1. Add Task
-    await page.click('button:has-text("+ Add Task")');
+    await page.click('button:has-text("Add Task")');
     await page.fill('#t-title', 'Verify Mocked IPC');
     await page.selectOption('#t-priority', '2'); // High
-    await page.check('#task-daily-priority-checkbox'); // Add to My Day
+    await page.locator('.ui.checkbox:has(#task-daily-priority-checkbox)').click(); // Add to My Day
     await page.click('button[type="submit"]'); // Create Task
 
     // Verify task is in "On My Plate" column (needs_to_do)
@@ -124,9 +134,7 @@ test.describe('Memor E2E Test Suite', () => {
     await expect(todoColumn).toContainText('Verify Mocked IPC');
 
     // 2. Edit Task & Log quick comment
-    await todoColumn
-      .locator('.task-card:has-text("Verify Mocked IPC") button:has-text("✏️")')
-      .click();
+    await taskAction(todoColumn, 'Verify Mocked IPC', 'edit').click();
     await page.selectOption('#t-status', 'in_progress'); // Move to In Progress
     await page.fill('#t-percent', '60'); // 60% progress
     await page.fill('#t-comment', 'First draft of test specs'); // Add Quick Note
@@ -140,42 +148,34 @@ test.describe('Memor E2E Test Suite', () => {
     ).toContainText('60%');
 
     // 3. Add date-associated history note
-    await inProgressColumn
-      .locator('.task-card:has-text("Verify Mocked IPC") button:has-text("✏️")')
-      .click();
+    await taskAction(inProgressColumn, 'Verify Mocked IPC', 'edit').click();
     await page.fill('#new-note-text-input', 'Mocking Tauri listen / event channels');
     await page.fill('#new-note-percent-range', '90'); // Set note progress to 90%
     await page.click('button:has-text("Log Note")');
 
     // Verify note is added to notes list
-    await expect(page.locator('.modal-content')).toContainText(
-      'Mocking Tauri listen / event channels',
-    );
+    await expect(visibleModal(page)).toContainText('Mocking Tauri listen / event channels');
     await page.click('button:has-text("Cancel")');
 
     // 4. Delete task
-    await inProgressColumn
-      .locator('.task-card:has-text("Verify Mocked IPC") button:has-text("🗑️")')
-      .click();
+    await taskAction(inProgressColumn, 'Verify Mocked IPC', 'delete').click();
     await expect(inProgressColumn).not.toContainText('Verify Mocked IPC');
 
     // 5. Restore task from Trash Bin
-    await page.click('button:has-text("Trash Bin")');
-    await expect(page.locator('.modal-content')).toContainText('Verify Mocked IPC');
-    await page.click('.modal-content button:has-text("Restore")');
-    await page.click('.modal-content button:has-text("Close")');
+    await sidebarItem(page, 'Trash Bin').click();
+    await expect(visibleModal(page)).toContainText('Verify Mocked IPC');
+    await visibleModal(page).getByRole('button', { name: 'Restore' }).click();
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
 
     // Verify task is back in Dashboard under In Progress column (since it was restored to its last state)
     await expect(inProgressColumn).toContainText('Verify Mocked IPC');
 
     // 6. Purge task permanently
-    await inProgressColumn
-      .locator('.task-card:has-text("Verify Mocked IPC") button:has-text("🗑️")')
-      .click();
-    await page.click('button:has-text("Trash Bin")');
-    await page.click('.modal-content button:has-text("Purge")');
-    await expect(page.locator('.modal-content')).not.toContainText('Verify Mocked IPC');
-    await page.click('.modal-content button:has-text("Close")');
+    await taskAction(inProgressColumn, 'Verify Mocked IPC', 'delete').click();
+    await sidebarItem(page, 'Trash Bin').click();
+    await visibleModal(page).getByRole('button', { name: 'Purge' }).click();
+    await expect(visibleModal(page)).not.toContainText('Verify Mocked IPC');
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
   });
 
   test('Settings Updates & Lock Session', async ({ page }) => {
@@ -188,7 +188,7 @@ test.describe('Memor E2E Test Suite', () => {
 
     // 1. Toggle Secure Auto-Unlock
     const keyringCheckbox = page.locator('#keyring-toggle-checkbox');
-    await keyringCheckbox.check();
+    await page.locator('.ui.checkbox:has(#keyring-toggle-checkbox)').click();
     await expect(keyringCheckbox).toBeChecked();
 
     // 2. Change Lock Timeout dropdown
@@ -225,7 +225,7 @@ test.describe('Memor E2E Test Suite', () => {
     await expect(page.locator('.summary-container')).toContainText('Lint & Format Configuration');
 
     // Test search filter on activity timeline
-    await page.fill('input[placeholder="🔍 Search activity..."]', 'eslint');
+    await page.fill('input[placeholder="Search activity..."]', 'eslint');
     await expect(page.locator('.summary-container')).toContainText('Lint & Format Configuration');
     await expect(page.locator('.summary-container')).not.toContainText(
       'E2E Testing Implementation',

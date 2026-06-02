@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { Grid, Segment, Form, Button, Checkbox, Message, Icon, Input } from 'semantic-ui-react';
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -73,91 +74,149 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   if (loading) {
     return (
       <div className="lock-screen-container">
-        <div className="lock-card glass-panel">
-          <div className="lock-icon-wrapper">
-            <span>⏳</span>
-          </div>
-          <h2>Securing Database</h2>
-          <p>Checking security credentials...</p>
-        </div>
+        <Grid textAlign="center" style={{ height: '100vh', width: '100%' }} verticalAlign="middle">
+          <Grid.Column style={{ maxWidth: 400 }}>
+            <Segment
+              raised
+              padded="very"
+              className="lock-card glass-panel"
+              style={{
+                background: 'var(--glass-bg)',
+                border: '1px solid var(--glass-border)',
+                color: 'var(--text-high)',
+              }}
+            >
+              <div
+                className="lock-icon-wrapper"
+                style={{ display: 'inline-flex', justifyContent: 'center', alignItems: 'center' }}
+              >
+                <Icon name="spinner" loading size="large" />
+              </div>
+              <h2 style={{ color: 'var(--text-high)', marginTop: '16px' }}>Securing Database</h2>
+              <p style={{ color: 'var(--text-med)' }}>Checking security credentials...</p>
+            </Segment>
+          </Grid.Column>
+        </Grid>
       </div>
     );
   }
 
   return (
     <div className="lock-screen-container">
-      <div className="lock-card glass-panel">
-        <div className="lock-icon-wrapper">
-          <span>🔒</span>
-        </div>
-
-        <h2>{isFirstRun ? 'Setup Master Password' : 'Memor Decryption'}</h2>
-        <p>
-          {isFirstRun
-            ? 'Create a master password to encrypt your local database. Keep this safe; it cannot be recovered.'
-            : 'Enter your master password to decrypt your task database.'}
-        </p>
-
-        <form
-          onSubmit={handleUnlock}
-          style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}
-        >
-          <div className="form-group" style={{ textAlign: 'left' }}>
-            <label htmlFor="master-password">
-              {isFirstRun ? 'Choose Master Password' : 'Master Password'}
-              <input
-                type="password"
-                id="master-password"
-                ref={passwordInputRef}
-                className="form-input"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
-              />
-            </label>
-          </div>
-
-          {isFirstRun && (
-            <div className="form-group" style={{ textAlign: 'left' }}>
-              <label htmlFor="confirm-password">
-                Confirm Master Password
-                <input
-                  type="password"
-                  id="confirm-password"
-                  className="form-input"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                />
-              </label>
+      <Grid textAlign="center" style={{ height: '100vh', width: '100%' }} verticalAlign="middle">
+        <Grid.Column style={{ maxWidth: 400 }}>
+          <Segment
+            raised
+            padded="very"
+            className="lock-card glass-panel"
+            style={{
+              background: 'var(--glass-bg)',
+              border: '1px solid var(--glass-border)',
+              color: 'var(--text-high)',
+              textAlign: 'center',
+            }}
+          >
+            <div
+              className="lock-icon-wrapper"
+              style={{
+                display: 'inline-flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginBottom: '16px',
+              }}
+            >
+              <Icon name="lock" size="large" style={{ color: 'var(--primary)' }} />
             </div>
-          )}
 
-          <label
-            className="form-checkbox"
-            style={{ alignSelf: 'flex-start' }}
-            htmlFor="keyring-checkbox"
-          >
-            <input
-              id="keyring-checkbox"
-              type="checkbox"
-              checked={saveInKeyring}
-              onChange={(e) => setSaveInKeyring(e.target.checked)}
-            />
-            <span>Remember in system keyring</span>
-          </label>
+            <h2 style={{ color: 'var(--text-high)', margin: '0 0 8px 0' }}>
+              {isFirstRun ? 'Setup Master Password' : 'Memor Decryption'}
+            </h2>
+            <p style={{ color: 'var(--text-med)', fontSize: '14px', marginBottom: '24px' }}>
+              {isFirstRun
+                ? 'Create a master password to encrypt your local database. Keep this safe; it cannot be recovered.'
+                : 'Enter your master password to decrypt your task database.'}
+            </p>
 
-          {error && <div className="lock-error">{error}</div>}
+            <Form size="large" onSubmit={handleUnlock} style={{ textAlign: 'left' }}>
+              <Form.Field
+                label={{
+                  content: isFirstRun ? 'Choose Master Password' : 'Master Password',
+                  style: {
+                    color: 'var(--text-med)',
+                    fontWeight: 500,
+                    fontSize: '12px',
+                    marginBottom: '6px',
+                  },
+                }}
+                control={Input}
+                id="master-password"
+                type="password"
+                inputRef={passwordInputRef}
+                value={password}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                placeholder="••••••••••••"
+                fluid
+              />
 
-          <button
-            type="submit"
-            className="btn btn-primary"
-            style={{ width: '100%', padding: '12px' }}
-          >
-            {isFirstRun ? 'Create & Initialize Database' : 'Decrypt Database'}
-          </button>
-        </form>
-      </div>
+              {isFirstRun && (
+                <Form.Field
+                  label={{
+                    content: 'Confirm Master Password',
+                    style: {
+                      color: 'var(--text-med)',
+                      fontWeight: 500,
+                      fontSize: '12px',
+                      marginBottom: '6px',
+                    },
+                  }}
+                  control={Input}
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setConfirmPassword(e.target.value)
+                  }
+                  placeholder="••••••••••••"
+                  fluid
+                />
+              )}
+
+              <Form.Field style={{ margin: '16px 0' }}>
+                <Checkbox
+                  id="keyring-checkbox"
+                  label="Remember in system keyring"
+                  checked={saveInKeyring}
+                  onChange={(_, data) => setSaveInKeyring(Boolean(data.checked))}
+                />
+              </Form.Field>
+
+              {error && (
+                <Message
+                  className="lock-error"
+                  negative
+                  size="small"
+                  style={{ margin: '0 0 16px 0', padding: '10px 12px' }}
+                >
+                  <Message.Header style={{ fontSize: '13px', fontWeight: 600 }}>
+                    Decryption Failed
+                  </Message.Header>
+                  <p style={{ fontSize: '12px', margin: 0 }}>{error}</p>
+                </Message>
+              )}
+
+              <Button
+                type="submit"
+                primary
+                fluid
+                size="large"
+                style={{ borderRadius: '8px', padding: '14px' }}
+              >
+                {isFirstRun ? 'Create & Initialize Database' : 'Decrypt Database'}
+              </Button>
+            </Form>
+          </Segment>
+        </Grid.Column>
+      </Grid>
     </div>
   );
 };

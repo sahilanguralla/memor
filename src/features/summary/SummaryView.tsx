@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import {
+  Container,
+  Header,
+  Button,
+  Segment,
+  Grid,
+  Statistic,
+  List,
+  Icon,
+  Message,
+} from 'semantic-ui-react';
 import { SummaryResponse } from '../../domain/types';
 
 export const SummaryView: React.FC = () => {
@@ -57,24 +68,24 @@ export const SummaryView: React.FC = () => {
   const renderContent = () => {
     if (loading) {
       return (
-        <div
+        <Segment
+          basic
+          textAlign="center"
           style={{
-            display: 'flex',
-            justifyContent: 'center',
             padding: '40px',
             color: 'var(--text-med)',
           }}
         >
-          Loading summary details...
-        </div>
+          <Icon name="spinner" loading /> Loading summary details...
+        </Segment>
       );
     }
 
     if (error) {
       return (
-        <div className="lock-error" style={{ textAlign: 'center', padding: '20px' }}>
+        <Message negative style={{ textAlign: 'center', margin: '20px' }}>
           {error}
-        </div>
+        </Message>
       );
     }
 
@@ -83,103 +94,84 @@ export const SummaryView: React.FC = () => {
     return (
       <>
         {/* Stats Bar */}
-        <div
+        <Segment
           className="glass-panel"
           style={{
             padding: '20px',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '16px',
-            textAlign: 'center',
+            background: 'var(--glass-bg)',
+            border: '1px solid var(--glass-border)',
+            margin: '0 0 16px 0',
           }}
         >
-          <div>
-            <div
-              style={{
-                fontSize: '12px',
-                color: 'var(--text-low)',
-                textTransform: 'uppercase',
-                fontWeight: '600',
-              }}
-            >
-              Completed
-            </div>
-            <div
-              style={{
-                fontSize: '28px',
-                fontWeight: '700',
-                color: 'var(--accent)',
-                marginTop: '4px',
-              }}
-            >
-              {stats.completed}
-            </div>
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: '12px',
-                color: 'var(--text-low)',
-                textTransform: 'uppercase',
-                fontWeight: '600',
-              }}
-            >
-              In Progress
-            </div>
-            <div
-              style={{
-                fontSize: '28px',
-                fontWeight: '700',
-                color: 'var(--primary)',
-                marginTop: '4px',
-              }}
-            >
-              {stats.active}
-            </div>
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: '12px',
-                color: 'var(--text-low)',
-                textTransform: 'uppercase',
-                fontWeight: '600',
-              }}
-            >
-              On My Plate
-            </div>
-            <div
-              style={{
-                fontSize: '28px',
-                fontWeight: '700',
-                color: 'var(--warn)',
-                marginTop: '4px',
-              }}
-            >
-              {stats.pending}
-            </div>
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: '12px',
-                color: 'var(--text-low)',
-                textTransform: 'uppercase',
-                fontWeight: '600',
-              }}
-            >
-              Completion Rate
-            </div>
-            <div
-              style={{ fontSize: '28px', fontWeight: '700', color: '#a5b4fc', marginTop: '4px' }}
-            >
-              {completionRate}%
-            </div>
-          </div>
-        </div>
+          <Statistic.Group widths={4} size="small" inverted style={{ margin: 0 }}>
+            <Statistic color="green">
+              <Statistic.Value>{stats.completed}</Statistic.Value>
+              <Statistic.Label
+                style={{
+                  color: 'var(--text-low)',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  marginTop: '4px',
+                }}
+              >
+                Completed
+              </Statistic.Label>
+            </Statistic>
+            <Statistic color="blue">
+              <Statistic.Value>{stats.active}</Statistic.Value>
+              <Statistic.Label
+                style={{
+                  color: 'var(--text-low)',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  marginTop: '4px',
+                }}
+              >
+                In Progress
+              </Statistic.Label>
+            </Statistic>
+            <Statistic color="orange">
+              <Statistic.Value>{stats.pending}</Statistic.Value>
+              <Statistic.Label
+                style={{
+                  color: 'var(--text-low)',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  marginTop: '4px',
+                }}
+              >
+                On My Plate
+              </Statistic.Label>
+            </Statistic>
+            <Statistic color="purple">
+              <Statistic.Value>{completionRate}%</Statistic.Value>
+              <Statistic.Label
+                style={{
+                  color: 'var(--text-low)',
+                  fontSize: '11px',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  marginTop: '4px',
+                }}
+              >
+                Completion Rate
+              </Statistic.Label>
+            </Statistic>
+          </Statistic.Group>
+        </Segment>
 
         {/* Date range subtitle */}
-        <div style={{ fontSize: '14px', color: 'var(--text-med)', marginTop: '8px' }}>
+        <div
+          style={{
+            fontSize: '14px',
+            color: 'var(--text-med)',
+            marginTop: '8px',
+            marginBottom: '16px',
+          }}
+        >
           Showing activity from <strong>{summary.start_date}</strong> to{' '}
           <strong>{summary.end_date}</strong>.
         </div>
@@ -187,91 +179,183 @@ export const SummaryView: React.FC = () => {
         {/* Projects and tasks */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {summary.projects.length === 0 ? (
-            <div
+            <Segment
               className="glass-panel"
-              style={{ padding: '32px', textAlign: 'center', color: 'var(--text-med)' }}
+              style={{
+                padding: '32px',
+                textAlign: 'center',
+                color: 'var(--text-med)',
+                background: 'var(--glass-bg)',
+                border: '1px solid var(--glass-border)',
+              }}
             >
               No active tasks found in this period. Start working on your plate!
-            </div>
+            </Segment>
           ) : (
             summary.projects.map((p) => (
-              <div key={p.project_name} className="summary-project-card">
-                <h3 className="summary-project-name">
+              <Segment
+                key={p.project_name}
+                className="summary-project-card"
+                style={{
+                  background: 'rgba(15, 23, 42, 0.3)',
+                  border: '1px solid var(--panel-border)',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  margin: 0,
+                }}
+              >
+                <Header
+                  as="h3"
+                  style={{
+                    fontSize: '16px',
+                    fontWeight: 600,
+                    color: 'var(--text-high)',
+                    margin: '0 0 16px 0',
+                  }}
+                >
                   {p.project_name === 'Ad-hoc' ? '📦 Ad-hoc Tasks' : `📂 ${p.project_name}`}
-                </h3>
+                </Header>
 
-                <div className="summary-grids">
+                <Grid columns={3} stackable divided style={{ margin: 0 }}>
                   {/* Completed */}
-                  <div className="summary-list-box">
-                    <div className="summary-list-title completed">Done ({p.completed.length})</div>
-                    {p.completed.length === 0 ? (
-                      <div
-                        style={{
-                          color: 'var(--text-low)',
-                          fontSize: '13px',
-                          fontStyle: 'italic',
-                        }}
-                      >
-                        None completed
-                      </div>
-                    ) : (
-                      p.completed.map((t) => (
-                        <div key={t} className="summary-task-item completed">
-                          {t}
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  <Grid.Column style={{ padding: '0 10px' }}>
+                    <Header
+                      as="h5"
+                      color="green"
+                      style={{
+                        textTransform: 'uppercase',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        margin: '0 0 12px 0',
+                      }}
+                    >
+                      Done ({p.completed.length})
+                    </Header>
+                    <List relaxed style={{ margin: 0 }}>
+                      {p.completed.length === 0 ? (
+                        <span
+                          style={{
+                            color: 'var(--text-low)',
+                            fontSize: '13px',
+                            fontStyle: 'italic',
+                          }}
+                        >
+                          None completed
+                        </span>
+                      ) : (
+                        p.completed.map((t) => (
+                          <List.Item
+                            key={t}
+                            style={{
+                              color: 'var(--text-med)',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 0',
+                            }}
+                          >
+                            <Icon name="check circle" color="green" style={{ margin: 0 }} />
+                            <span>{t}</span>
+                          </List.Item>
+                        ))
+                      )}
+                    </List>
+                  </Grid.Column>
 
                   {/* In Progress */}
-                  <div className="summary-list-box">
-                    <div className="summary-list-title in-progress">
+                  <Grid.Column style={{ padding: '0 10px' }}>
+                    <Header
+                      as="h5"
+                      color="blue"
+                      style={{
+                        textTransform: 'uppercase',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        margin: '0 0 12px 0',
+                      }}
+                    >
                       In Progress ({p.in_progress.length})
-                    </div>
-                    {p.in_progress.length === 0 ? (
-                      <div
-                        style={{
-                          color: 'var(--text-low)',
-                          fontSize: '13px',
-                          fontStyle: 'italic',
-                        }}
-                      >
-                        None in progress
-                      </div>
-                    ) : (
-                      p.in_progress.map((t) => (
-                        <div key={t} className="summary-task-item in-progress">
-                          {t}
-                        </div>
-                      ))
-                    )}
-                  </div>
+                    </Header>
+                    <List relaxed style={{ margin: 0 }}>
+                      {p.in_progress.length === 0 ? (
+                        <span
+                          style={{
+                            color: 'var(--text-low)',
+                            fontSize: '13px',
+                            fontStyle: 'italic',
+                          }}
+                        >
+                          None in progress
+                        </span>
+                      ) : (
+                        p.in_progress.map((t) => (
+                          <List.Item
+                            key={t}
+                            style={{
+                              color: 'var(--text-med)',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 0',
+                            }}
+                          >
+                            <Icon name="play circle" color="blue" style={{ margin: 0 }} />
+                            <span>{t}</span>
+                          </List.Item>
+                        ))
+                      )}
+                    </List>
+                  </Grid.Column>
 
                   {/* Pending */}
-                  <div className="summary-list-box">
-                    <div className="summary-list-title pending">
+                  <Grid.Column style={{ padding: '0 10px' }}>
+                    <Header
+                      as="h5"
+                      color="orange"
+                      style={{
+                        textTransform: 'uppercase',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        margin: '0 0 12px 0',
+                      }}
+                    >
                       On My Plate ({p.pending.length})
-                    </div>
-                    {p.pending.length === 0 ? (
-                      <div
-                        style={{
-                          color: 'var(--text-low)',
-                          fontSize: '13px',
-                          fontStyle: 'italic',
-                        }}
-                      >
-                        No tasks on plate
-                      </div>
-                    ) : (
-                      p.pending.map((t) => (
-                        <div key={t} className="summary-task-item pending">
-                          {t}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
+                    </Header>
+                    <List relaxed style={{ margin: 0 }}>
+                      {p.pending.length === 0 ? (
+                        <span
+                          style={{
+                            color: 'var(--text-low)',
+                            fontSize: '13px',
+                            fontStyle: 'italic',
+                          }}
+                        >
+                          No tasks on plate
+                        </span>
+                      ) : (
+                        p.pending.map((t) => (
+                          <List.Item
+                            key={t}
+                            style={{
+                              color: 'var(--text-med)',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 0',
+                            }}
+                          >
+                            <Icon name="hourglass outline" color="orange" style={{ margin: 0 }} />
+                            <span>{t}</span>
+                          </List.Item>
+                        ))
+                      )}
+                    </List>
+                  </Grid.Column>
+                </Grid>
+              </Segment>
             ))
           )}
         </div>
@@ -280,39 +364,58 @@ export const SummaryView: React.FC = () => {
   };
 
   return (
-    <div className="summary-container">
-      <div className="summary-header">
+    <Container
+      className="summary-container"
+      style={{
+        padding: '24px',
+        margin: '0 auto',
+        overflowY: 'auto',
+        height: '100%',
+      }}
+    >
+      <div
+        className="summary-header"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '24px',
+        }}
+      >
         <div>
-          <h2 className="view-title">📈 Productivity Summaries</h2>
-          <p style={{ color: 'var(--text-med)', fontSize: '14px', marginTop: '4px' }}>
+          <Header as="h2" className="view-title" style={{ margin: 0, color: 'var(--text-high)' }}>
+            📈 Productivity Summaries
+          </Header>
+          <p style={{ color: 'var(--text-med)', fontSize: '14px', marginTop: '4px', margin: 0 }}>
             Track what you&apos;ve achieved, what you&apos;ve worked on, and what&apos;s remaining.
           </p>
         </div>
 
-        <div className="summary-controls">
-          <div
-            style={{
-              display: 'flex',
-              background: 'rgba(255,255,255,0.05)',
-              borderRadius: '8px',
-              padding: '2px',
-              border: '1px solid var(--glass-border)',
-            }}
-          >
-            <button
-              type="button"
-              className={`nav-btn ${summaryType === 'daily' ? 'active' : ''}`}
+        <div
+          className="summary-controls"
+          style={{ display: 'flex', gap: '12px', alignItems: 'center' }}
+        >
+          <Button.Group size="small">
+            <Button
+              active={summaryType === 'daily'}
               onClick={() => {
                 setSummaryType('daily');
                 setSelectedDate(new Date().toISOString().split('T')[0]);
               }}
-              style={{ padding: '6px 12px' }}
+              style={{
+                background: summaryType === 'daily' ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                color: summaryType === 'daily' ? '#ffffff' : 'var(--text-med)',
+                border:
+                  summaryType === 'daily'
+                    ? '1px solid rgba(99, 102, 241, 0.3)'
+                    : '1px solid rgba(255,255,255,0.05)',
+                fontWeight: 500,
+              }}
             >
               Daily
-            </button>
-            <button
-              type="button"
-              className={`nav-btn ${summaryType === 'weekly' ? 'active' : ''}`}
+            </Button>
+            <Button
+              active={summaryType === 'weekly'}
               onClick={() => {
                 setSummaryType('weekly');
                 // Default weekly focus starts 6 days ago (covers 7 days total)
@@ -320,26 +423,42 @@ export const SummaryView: React.FC = () => {
                 start.setDate(start.getDate() - 6);
                 setSelectedDate(start.toISOString().split('T')[0]);
               }}
-              style={{ padding: '6px 12px' }}
+              style={{
+                background: summaryType === 'weekly' ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                color: summaryType === 'weekly' ? '#ffffff' : 'var(--text-med)',
+                border:
+                  summaryType === 'weekly'
+                    ? '1px solid rgba(99, 102, 241, 0.3)'
+                    : '1px solid rgba(255,255,255,0.05)',
+                fontWeight: 500,
+              }}
             >
               Weekly
-            </button>
-          </div>
+            </Button>
+          </Button.Group>
 
           <input
             type="date"
-            className="form-input"
             value={selectedDate}
             onChange={(e) => {
               setSelectedDate(e.target.value);
               e.target.blur();
             }}
-            style={{ padding: '8px 12px' }}
+            style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid var(--glass-border)',
+              color: 'var(--text-high)',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              fontSize: '14px',
+              outline: 'none',
+              height: '34px',
+            }}
           />
         </div>
       </div>
 
       {renderContent()}
-    </div>
+    </Container>
   );
 };

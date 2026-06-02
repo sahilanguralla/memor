@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { Container, Header, Input, Feed, Label, Segment, Icon, Message } from 'semantic-ui-react';
 import { TaskUpdate } from '../../domain/types';
 
 export const TimelineView: React.FC = () => {
@@ -58,28 +59,6 @@ export const TimelineView: React.FC = () => {
   // Sort dates descending
   const sortedDates = Object.keys(groupedUpdates).sort((a, b) => b.localeCompare(a));
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'done':
-        return 'var(--accent)';
-      case 'in_progress':
-        return 'var(--primary)';
-      default:
-        return 'var(--warn)';
-    }
-  };
-
-  const getStatusGlow = (status: string) => {
-    switch (status) {
-      case 'done':
-        return 'var(--accent-glow)';
-      case 'in_progress':
-        return 'var(--primary-glow)';
-      default:
-        return 'var(--warn-glow)';
-    }
-  };
-
   const formatDateLabel = (dateStr: string) => {
     try {
       const parts = dateStr.split('-');
@@ -119,190 +98,156 @@ export const TimelineView: React.FC = () => {
   const renderContent = () => {
     if (loading && updates.length === 0) {
       return (
-        <div
+        <Segment
+          basic
+          textAlign="center"
           style={{
-            display: 'flex',
-            justifyContent: 'center',
             padding: '40px',
             color: 'var(--text-med)',
           }}
         >
-          Loading activity logs...
-        </div>
+          <Icon name="spinner" loading /> Loading activity logs...
+        </Segment>
       );
     }
 
     if (error) {
       return (
-        <div className="lock-error" style={{ textAlign: 'center', padding: '20px' }}>
+        <Message negative style={{ textAlign: 'center', margin: '20px' }}>
           {error}
-        </div>
+        </Message>
       );
     }
 
     if (filteredUpdates.length === 0) {
       return (
-        <div
+        <Segment
           className="glass-panel"
-          style={{ padding: '40px', textAlign: 'center', color: 'var(--text-med)' }}
+          style={{
+            padding: '40px',
+            textAlign: 'center',
+            color: 'var(--text-med)',
+            background: 'var(--glass-bg)',
+            border: '1px solid var(--glass-border)',
+          }}
         >
           {searchQuery
             ? 'No matching activity found.'
             : 'No task updates logged yet. Progress updates will appear here.'}
-        </div>
+        </Segment>
       );
     }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '8px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '8px' }}>
         {sortedDates.map((date) => (
-          <div key={date} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div key={date} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {/* Date Header */}
-            <div
+            <Header
+              as="h4"
+              dividing
               style={{
                 fontSize: '13px',
                 fontWeight: '600',
                 color: 'var(--primary)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
-                borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                margin: '24px 0 12px 0',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
                 paddingBottom: '6px',
               }}
             >
               {formatDateLabel(date)}
-            </div>
+            </Header>
 
-            {/* Timeline Items */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                paddingLeft: '8px',
-                position: 'relative',
-              }}
-            >
-              {/* Vertical timeline line */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '17px',
-                  top: '10px',
-                  bottom: '10px',
-                  width: '2px',
-                  background: 'rgba(255,255,255,0.06)',
-                }}
-              />
+            {/* Timeline Items Feed */}
+            <Feed size="large" style={{ paddingLeft: '8px', margin: 0 }}>
+              {groupedUpdates[date].map((update) => {
+                let semanticColor: any = 'grey';
+                let iconName: any = 'hourglass outline';
+                if (update.status === 'done') {
+                  semanticColor = 'green';
+                  iconName = 'check circle';
+                } else if (update.status === 'in_progress') {
+                  semanticColor = 'blue';
+                  iconName = 'play circle';
+                } else if (update.status === 'todo') {
+                  semanticColor = 'orange';
+                  iconName = 'hourglass outline';
+                }
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {groupedUpdates[date].map((update) => (
-                  <div
-                    key={update.id}
-                    style={{
-                      display: 'flex',
-                      gap: '16px',
-                      alignItems: 'flex-start',
-                      position: 'relative',
-                    }}
-                  >
-                    {/* Circle node indicator */}
-                    <div
+                return (
+                  <Feed.Event key={update.id} style={{ padding: '8px 0' }}>
+                    <Feed.Label
                       style={{
-                        width: '20px',
-                        height: '20px',
-                        borderRadius: '50%',
-                        background: getStatusGlow(update.status),
-                        border: `2px solid ${getStatusColor(update.status)}`,
-                        zIndex: 2,
-                        marginTop: '12px',
-                        flexShrink: 0,
-                        boxShadow: `0 0 10px ${getStatusGlow(update.status)}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                      }}
-                    />
-
-                    {/* Content Card */}
-                    <div
-                      className="glass-panel"
-                      style={{
-                        flex: 1,
-                        padding: '12px 16px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px',
-                        transition: 'transform 0.2s ease, border-color 0.2s ease',
-                        cursor: 'default',
+                        paddingTop: '4px',
                       }}
                     >
-                      <div
+                      <Icon name={iconName} color={semanticColor} size="large" />
+                    </Feed.Label>
+                    <Feed.Content>
+                      <Segment
+                        className="glass-panel"
                         style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'flex-start',
-                          gap: '12px',
+                          background: 'var(--glass-bg)',
+                          border: '1px solid var(--glass-border)',
+                          padding: '12px 16px',
+                          margin: 0,
+                          borderRadius: '8px',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                         }}
                       >
-                        <h4
+                        <div
                           style={{
-                            fontSize: '14px',
-                            fontWeight: '600',
-                            color: 'var(--text-high)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            gap: '12px',
+                            marginBottom: '6px',
                           }}
                         >
-                          {update.task_title}
-                        </h4>
-                        <span style={{ fontSize: '11px', color: 'var(--text-low)' }}>
-                          {formatTime(update.created_at)}
-                        </span>
-                      </div>
+                          <span
+                            style={{
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              color: 'var(--text-high)',
+                            }}
+                          >
+                            {update.task_title}
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-low)' }}>
+                            {formatTime(update.created_at)}
+                          </span>
+                        </div>
 
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          color: 'var(--text-med)',
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {update.update_text}
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                        <span
+                        <div
                           style={{
-                            fontSize: '10px',
-                            padding: '2px 6px',
-                            background: 'var(--primary-glow)',
-                            borderRadius: '4px',
-                            color: '#a5b4fc',
-                            fontWeight: '500',
+                            fontSize: '13px',
+                            color: 'var(--text-med)',
+                            wordBreak: 'break-word',
+                            marginBottom: '8px',
                           }}
                         >
-                          📈 Progress: {update.completion_percentage}%
-                        </span>
+                          {update.update_text}
+                        </div>
 
-                        <span
-                          style={{
-                            fontSize: '10px',
-                            padding: '2px 6px',
-                            background:
-                              update.status === 'done'
-                                ? 'var(--accent-glow)'
-                                : 'rgba(255,255,255,0.04)',
-                            borderRadius: '4px',
-                            color: update.status === 'done' ? 'var(--accent)' : 'var(--text-med)',
-                            fontWeight: '600',
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          {statusLabels[update.status] || update.status}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <Label size="mini" color="blue" style={{ margin: 0 }}>
+                            📈 Progress: {update.completion_percentage}%
+                          </Label>
+                          <Label size="mini" color={semanticColor} style={{ margin: 0 }}>
+                            {statusLabels[update.status] || update.status}
+                          </Label>
+                        </div>
+                      </Segment>
+                    </Feed.Content>
+                  </Feed.Event>
+                );
+              })}
+            </Feed>
           </div>
         ))}
       </div>
@@ -310,31 +255,49 @@ export const TimelineView: React.FC = () => {
   };
 
   return (
-    <div
+    <Container
       className="summary-container"
-      style={{ maxWidth: '800px', margin: '0 auto', width: '100%' }}
+      style={{
+        maxWidth: '800px',
+        margin: '0 auto',
+        width: '100%',
+        padding: '24px',
+        overflowY: 'auto',
+        height: '100%',
+      }}
     >
-      <div className="summary-header">
+      <div
+        className="summary-header"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '24px',
+        }}
+      >
         <div>
-          <h2 className="view-title">📜 Task Activity Timeline</h2>
-          <p style={{ color: 'var(--text-med)', fontSize: '14px', marginTop: '4px' }}>
+          <Header as="h2" className="view-title" style={{ margin: 0, color: 'var(--text-high)' }}>
+            📜 Task Activity Timeline
+          </Header>
+          <p style={{ color: 'var(--text-med)', fontSize: '14px', marginTop: '4px', margin: 0 }}>
             A chronological feed of all task progress updates, status changes, and logged notes.
           </p>
         </div>
 
         <div className="summary-controls">
-          <input
-            type="text"
-            className="form-input"
-            placeholder="🔍 Search activity..."
+          <Input
+            icon="search"
+            iconPosition="left"
+            placeholder="Search activity..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ width: '220px', padding: '8px 12px' }}
+            size="small"
+            style={{ width: '220px' }}
           />
         </div>
       </div>
 
       {renderContent()}
-    </div>
+    </Container>
   );
 };

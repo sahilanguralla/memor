@@ -8,8 +8,19 @@ const login = async (page: import('@playwright/test').Page) => {
   await page.goto('/');
   await page.fill('#master-password', 'password123');
   await page.click('button[type="submit"]');
-  await expect(page.locator('.brand h1')).toHaveText('Memor');
+  await expect(page.getByRole('button', { name: 'Dashboard' })).toBeVisible();
 };
+
+const visibleModal = (page: import('@playwright/test').Page) => page.locator('.ui.modal:visible');
+
+const sidebarItem = (page: import('@playwright/test').Page, text: string) =>
+  page.locator('.app-sidebar .item').filter({ hasText: text }).first();
+
+const taskAction = (
+  parent: import('@playwright/test').Locator,
+  taskTitle: string,
+  action: 'edit' | 'delete',
+) => parent.locator(`.task-card:has-text("${taskTitle}") button`).nth(action === 'edit' ? 0 : 1);
 
 const setRangeValue = async (
   page: import('@playwright/test').Page,
@@ -47,29 +58,29 @@ test.describe('Memor additional E2E coverage', () => {
   }) => {
     await login(page);
 
-    await page.locator('.sidebar-header button').first().click();
+    await page.locator('.sidebar-header button:visible').first().click();
     await page.click('button:has-text("Create Project")');
-    await expect(page.locator('.modal-content h3')).toHaveText('Create New Project');
-    await page.click('.modal-content button:has-text("Cancel")');
+    await expect(visibleModal(page).locator('h3')).toHaveText('Create New Project');
+    await visibleModal(page).getByRole('button', { name: 'Cancel' }).click();
 
-    await page.click('button:has-text("+ Add Task")');
+    await page.click('button:has-text("Add Task")');
     await page.click('button:has-text("Create Task")');
-    await expect(page.locator('.modal-content h3')).toHaveText('Add New Task');
+    await expect(visibleModal(page).locator('h3')).toHaveText('Add New Task');
 
     const dailyCheckbox = page.locator('#task-daily-priority-checkbox');
     const weeklyCheckbox = page.locator('#task-weekly-priority-checkbox');
-    await weeklyCheckbox.check();
-    await weeklyCheckbox.uncheck();
+    await page.locator('.ui.checkbox:has(#task-weekly-priority-checkbox)').click();
+    await page.locator('.ui.checkbox:has(#task-weekly-priority-checkbox)').click();
     await expect(dailyCheckbox).not.toBeChecked();
 
-    await dailyCheckbox.check();
+    await page.locator('.ui.checkbox:has(#task-daily-priority-checkbox)').click();
     await expect(weeklyCheckbox).toBeChecked();
 
-    await weeklyCheckbox.uncheck();
+    await page.locator('.ui.checkbox:has(#task-weekly-priority-checkbox)').click();
     await expect(dailyCheckbox).not.toBeChecked();
     await expect(weeklyCheckbox).not.toBeChecked();
 
-    await page.click('.modal-content button:has-text("Cancel")');
+    await visibleModal(page).getByRole('button', { name: 'Cancel' }).click();
   });
 
   test('past date banner allows dated task creation and returns to today', async ({ page }) => {
@@ -84,9 +95,8 @@ test.describe('Memor additional E2E coverage', () => {
       `Viewing past date: ${yesterdayStr}`,
     );
 
-    await page.click('button:has-text("+ Add Task")');
+    await page.click('button:has-text("Add Task")');
     await page.fill('#t-title', 'Backfill yesterday retro');
-    await page.check('#task-daily-priority-checkbox');
     await page.click('button:has-text("Create Task")');
 
     await expect
@@ -109,9 +119,9 @@ test.describe('Memor additional E2E coverage', () => {
   test('core task status and progress controls synchronize while editing', async ({ page }) => {
     await login(page);
 
-    await page.click('button:has-text("📅 Weekly Focus")');
+    await sidebarItem(page, 'Weekly Focus').click();
     const todoColumn = page.locator('.column-card:has-text("On My Plate")');
-    await todoColumn.locator('.task-card:has-text("Buy groceries") button:has-text("✏️")').click();
+    await taskAction(todoColumn, 'Buy groceries', 'edit').click();
 
     await page.selectOption('#t-status', 'done');
     await expect(page.locator('#t-percent')).toHaveValue('100');
@@ -161,7 +171,7 @@ test.describe('Memor additional E2E coverage', () => {
       'No task updates logged yet. Progress updates will appear here.',
     );
 
-    await page.fill('input[placeholder="🔍 Search activity..."]', 'nothing');
+    await page.fill('input[placeholder="Search activity..."]', 'nothing');
     await expect(page.locator('.summary-container')).toContainText('No matching activity found.');
 
     await page.click('button:has-text("Summaries")');

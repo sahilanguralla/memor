@@ -1,3 +1,4 @@
+import { Header, Button, Icon } from 'semantic-ui-react';
 import { Project } from '../../../domain/types';
 import { DashboardView } from '../types';
 
@@ -41,44 +42,59 @@ export const DashboardHeader = ({
   const selectedProject = projects.find((project) => project.project_id === selectedProjectId);
 
   return (
-    <div className="view-header">
+    <div
+      className="view-header"
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '24px',
+      }}
+    >
       <div>
-        <h2 className="view-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <Header
+          as="h2"
+          className="view-title"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            margin: 0,
+            color: 'var(--text-high)',
+          }}
+        >
           {activeView !== 'project' && viewTitles[activeView]}
           {activeView === 'project' && (
             <>
               📂 {selectedProject?.project_name || viewTitles.project}
               {selectedProjectId !== null && (
                 <div style={{ display: 'inline-flex', gap: '8px', marginLeft: '12px' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
+                  <Button
+                    basic
+                    compact
+                    size="tiny"
+                    color="blue"
                     onClick={() => onArchiveProject(selectedProjectId)}
-                    style={{ padding: '4px 8px', fontSize: '12px' }}
                     title="Archive Project"
                   >
-                    📥 Archive
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
+                    <Icon name="archive" /> Archive
+                  </Button>
+                  <Button
+                    basic
+                    compact
+                    size="tiny"
+                    color="red"
                     onClick={() => onDeleteProject(selectedProjectId)}
-                    style={{
-                      padding: '4px 8px',
-                      fontSize: '12px',
-                      borderColor: 'rgba(239, 68, 68, 0.2)',
-                      color: '#ef4444',
-                    }}
                     title="Delete Project"
                   >
-                    🗑️ Delete
-                  </button>
+                    <Icon name="trash" /> Delete
+                  </Button>
                 </div>
               )}
             </>
           )}
-        </h2>
-        <p style={{ color: 'var(--text-med)', fontSize: '14px', marginTop: '4px' }}>
+        </Header>
+        <p style={{ color: 'var(--text-med)', fontSize: '14px', marginTop: '4px', margin: 0 }}>
           {viewSubtitles[activeView]}
         </p>
       </div>
@@ -94,18 +110,22 @@ export const DashboardHeader = ({
             padding: '2px',
           }}
         >
-          <button
-            type="button"
-            className="action-btn"
+          <Button
+            icon="angle left"
+            basic
+            inverted
+            compact
             onClick={() => onShiftDate(-1)}
             title="Previous Day"
-            style={{ padding: '6px 10px', fontSize: '14px', color: 'var(--text-high)' }}
-          >
-            ◀
-          </button>
+            style={{
+              padding: '8px 12px',
+              background: 'transparent',
+              border: 'none',
+              boxShadow: 'none',
+            }}
+          />
           <input
             type="date"
-            className="form-input"
             value={selectedDate}
             onChange={(event) => {
               onDateChange(event.target.value);
@@ -118,35 +138,49 @@ export const DashboardHeader = ({
               fontSize: '14px',
               color: 'var(--text-high)',
               outline: 'none',
+              width: '140px',
             }}
           />
-          <button
-            type="button"
-            className="action-btn"
+          <Button
+            icon="angle right"
+            basic
+            inverted
+            compact
             onClick={() => onShiftDate(1)}
             title="Next Day"
-            style={{ padding: '6px 10px', fontSize: '14px', color: 'var(--text-high)' }}
-          >
-            ▶
-          </button>
+            style={{
+              padding: '8px 12px',
+              background: 'transparent',
+              border: 'none',
+              boxShadow: 'none',
+            }}
+          />
         </div>
         {activeView === 'my_day' && (
-          <button
-            type="button"
-            className="btn btn-secondary"
+          <Button
+            color="violet"
             onClick={onOpenPlanTomorrow}
+            size="small"
             style={{
               background: 'rgba(99, 102, 241, 0.1)',
               color: '#a5b4fc',
-              borderColor: 'rgba(99, 102, 241, 0.2)',
+              border: '1px solid rgba(99, 102, 241, 0.2)',
+              borderRadius: '8px',
+              padding: '10px 16px',
             }}
           >
-            🔮 Plan Tomorrow
-          </button>
+            <Icon name="magic" /> Plan Tomorrow
+          </Button>
         )}
-        <button type="button" className="btn btn-primary" onClick={onAddTask}>
-          + Add Task
-        </button>
+        <Button
+          primary
+          icon="plus"
+          labelPosition="left"
+          onClick={onAddTask}
+          size="small"
+          content="Add Task"
+          style={{ borderRadius: '8px', padding: '10px 16px' }}
+        />
       </div>
     </div>
   );
