@@ -1,178 +1,139 @@
-import { test, expect } from '../../test/e2e/fixtures';
+import { test, expect } from '../fixtures';
+import {
+  changeSelectValue,
+  createDialogState,
+  confirmTaskDelete,
+  installDialogHandler,
+  login,
+  resetDialogState,
+  resetMockSession,
+  selectInPrimaryModalFormByOption,
+  setRangeValue,
+  sidebarItem,
+  taskAction,
+  taskCompletionRange,
+  taskDeleteModal,
+  visibleModal,
+} from '../helpers';
 
-const visibleModal = (page: import('@playwright/test').Page) => page.locator('.ui.modal:visible');
-
-const sidebarItem = (page: import('@playwright/test').Page, text: string) =>
-  page.locator('.app-sidebar .item').filter({ hasText: text }).first();
-
-const taskAction = (
-  parent: import('@playwright/test').Locator,
-  taskTitle: string,
-  action: 'edit' | 'delete',
-) => parent.locator(`.task-card:has-text("${taskTitle}") button`).nth(action === 'edit' ? 0 : 1);
-
-test.describe('Memor E2E Coverage Expansion Suite', () => {
-  let dialogAction: 'accept' | 'dismiss' | 'default' = 'default';
-  let expectedMessage: string | null = null;
+test.describe('Dashboard e2e', () => {
+  const dialog = createDialogState();
 
   test.beforeEach(async ({ page }) => {
-    dialogAction = 'default';
-    expectedMessage = null;
-
-    // Custom global dialog handler to support specific dismiss/accept flows cleanly
-    page.on('dialog', async (dialog) => {
-      const msg = dialog.message();
-      if (expectedMessage && msg.includes(expectedMessage)) {
-        if (dialogAction === 'accept') {
-          await dialog.accept();
-        } else {
-          await dialog.dismiss();
-        }
-        expectedMessage = null;
-        dialogAction = 'default';
-      } else {
-        await dialog.accept();
-      }
-    });
-
-    // Clear session storage to ensure a clean state for each test
-    await page.goto('/');
-    await page.evaluate(() => {
-      sessionStorage.clear();
-    });
-    await page.goto('/');
+    resetDialogState(dialog);
+    installDialogHandler(page, dialog);
+    await resetMockSession(page);
   });
 
-  test('Lock Screen - Auto Unlock success, error, and empty password validation', async ({
-    page,
-  }) => {
-    // 1. Auto unlock success (mock unlock_db_with_saved_key returns true)
-    await page.addInitScript(() => {
-      (window as any).__TAURI_INTERNALS__ = (window as any).__TAURI_INTERNALS__ || {};
-      const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
-      (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
-        if (cmd === 'unlock_db_with_saved_key') {
-          return true;
-        }
-        return originalInvoke ? originalInvoke(cmd, args) : undefined;
-      };
-    });
-    await page.goto('/');
-    await expect(page.getByRole('button', { name: 'Dashboard' })).toBeVisible();
-
-    // 2. Auto unlock error handling and empty password validation
-    await page.goto('/');
-    await page.evaluate(() => sessionStorage.clear());
-    await page.addInitScript(() => {
-      (window as any).__TAURI_INTERNALS__ = (window as any).__TAURI_INTERNALS__ || {};
-      const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
-      (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
-        if (cmd === 'unlock_db_with_saved_key') {
-          throw new Error('Auto unlock database failed');
-        }
-        return originalInvoke ? originalInvoke(cmd, args) : undefined;
-      };
-    });
-    await page.goto('/');
-
-    await expect(page.locator('.lock-card h2')).toHaveText('Memor Decryption');
-    // Click submit with empty password
-    await page.click('button[type="submit"]');
-    await expect(page.locator('.lock-error')).toContainText('Please enter a master password.');
-  });
-
-  test('Lock Screen - First Run setup flows', async ({ page }) => {
-    await page.addInitScript(() => {
-      (window as any).__TAURI_INTERNALS__ = (window as any).__TAURI_INTERNALS__ || {};
-      const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
-      (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
-        if (cmd === 'is_first_run') {
-          return true;
-        }
-        return originalInvoke ? originalInvoke(cmd, args) : undefined;
-      };
-    });
-    await page.goto('/');
-
-    await expect(page.locator('.lock-card h2')).toHaveText('Setup Master Password');
-
-    // Passwords mismatch
-    await page.fill('#master-password', 'pass123');
-    await page.fill('#confirm-password', 'pass456');
-    await page.click('button[type="submit"]');
-    await expect(page.locator('.lock-error')).toContainText('Passwords do not match.');
-
-    // Correct passwords matching
-    await page.fill('#master-password', 'password123');
-    await page.fill('#confirm-password', 'password123');
-    await page.locator('.ui.checkbox:has(#keyring-checkbox)').click();
-    await page.click('button[type="submit"]');
-
-    await expect(page.getByRole('button', { name: 'Dashboard' })).toBeVisible();
-  });
-
-  test('Settings & Idle Timer Coverage', async ({ page }) => {
-    await page.goto('/');
+  test('Project Management - CRUD & Archiving', async ({ page }) => {
+    // Log in
     await page.fill('#master-password', 'password123');
     await page.click('button[type="submit"]');
 
-    // Go to settings
-    await page.click('button:has-text("Settings")');
+    // 1. Create a Project
+    await page.locator('.sidebar-header button:visible').click(); // Click '+'
+    await page.fill('#p-name', 'Vacation Planning');
+    await changeSelectValue(selectInPrimaryModalFormByOption(page, 'High Priority'), '2');
+    await page.click('button:has-text("Create Project")');
 
-    // Never auto lock timeout configuration (timeout <= 0)
-    await page.selectOption('#lock-timeout', '0');
-    await expect(page.locator('#lock-timeout')).toHaveValue('0');
+    // Verify project appears in sidebar container
+    await expect(page.locator('.project-list')).toContainText('Vacation Planning');
 
-    // Config update failure showAlert handling (inject dynamic evaluate invoke)
-    await page.evaluate(() => {
-      const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
-      (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
-        if (cmd === 'update_config') {
-          throw new Error('Failed to update config');
-        }
-        return originalInvoke(cmd, args);
-      };
-    });
-    expectedMessage = 'Failed to save settings';
-    dialogAction = 'accept';
-    const dialogPromise = page.waitForEvent('dialog');
-    await page.selectOption('#lock-timeout', '60');
-    await dialogPromise;
+    // 2. Archive the Project
+    await sidebarItem(page, 'Vacation Planning').click();
+    await page.click('button[title="Archive Project"]'); // Click Archive button in project header
 
-    // Manual lock failure catch blocks
-    await page.evaluate(() => {
-      const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
-      (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
-        if (cmd === 'lock_db') {
-          throw new Error('Failed to lock database connection');
-        }
-        return originalInvoke(cmd, args);
-      };
-    });
-    await page.click('button:has-text("Lock Database Now")');
-    await expect(page.locator('.view-title')).toContainText('Application Settings');
+    // Verify project disappears from sidebar
+    await expect(page.locator('.project-list')).not.toContainText('Vacation Planning');
 
-    await page.click('button:has-text("Lock")');
-    await expect(page.locator('.view-title')).toContainText('Application Settings');
+    // Verify project is in Archived list
+    await sidebarItem(page, 'Archived Projects').click();
+    await expect(visibleModal(page).locator('h3')).toHaveText('📁 Archived Projects');
+    await expect(visibleModal(page)).toContainText('Vacation Planning');
+
+    // 3. Restore the Project
+    await visibleModal(page).getByRole('button', { name: 'Restore Project' }).click();
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
+
+    // Verify project is back in sidebar
+    await expect(page.locator('.project-list')).toContainText('Vacation Planning');
+
+    // 4. Delete the Project
+    await sidebarItem(page, 'Vacation Planning').click();
+    await page.click('button[title="Delete Project"]'); // Click Delete button in project header
+
+    // Confirm delete in modal
+    await page.click('button:has-text("Yes, Delete Project and Tasks")');
+
+    // Verify project is permanently gone from sidebar
+    await expect(page.locator('.project-list')).not.toContainText('Vacation Planning');
   });
 
-  test('Settings - get_config failure fallback', async ({ page }) => {
-    await page.addInitScript(() => {
-      (window as any).__TAURI_INTERNALS__ = (window as any).__TAURI_INTERNALS__ || {};
-      const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
-      (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
-        if (cmd === 'get_config') {
-          throw new Error('Config read failed');
-        }
-        return originalInvoke ? originalInvoke(cmd, args) : undefined;
-      };
-    });
-    await page.goto('/');
+  test('Task Management - CRUD & History notes & Trash', async ({ page }) => {
+    // Log in
     await page.fill('#master-password', 'password123');
     await page.click('button[type="submit"]');
 
-    await page.click('button:has-text("Settings")');
-    await expect(page.locator('.view-title')).toContainText('Application Settings');
+    // Select "Work" project
+    await sidebarItem(page, 'Work').click();
+
+    // 1. Add Task
+    await page.click('button:has-text("Add Task")');
+    await page.fill('#t-title', 'Verify Mocked IPC');
+    await changeSelectValue(selectInPrimaryModalFormByOption(page, 'High Priority'), '2');
+    await page.locator('.ui.checkbox:has(#task-daily-priority-checkbox)').click(); // Add to My Day
+    await page.click('button[type="submit"]'); // Create Task
+
+    // Verify task is in "On My Plate" column (needs_to_do)
+    const todoColumn = page.locator('.column-card:has-text("On My Plate")');
+    await expect(todoColumn).toContainText('Verify Mocked IPC');
+
+    // 2. Edit Task & Log quick comment
+    await taskAction(todoColumn, 'Verify Mocked IPC', 'edit').click();
+    const statusSelect = selectInPrimaryModalFormByOption(page, 'In Progress');
+    await changeSelectValue(statusSelect, 'in_progress'); // Move to In Progress
+    await setRangeValue(page, 'input[aria-labelledby="t-percent-label"]', '60'); // 60% progress
+    await page.fill('#t-comment', 'First draft of test specs'); // Add Quick Note
+    await page.click('button[type="submit"]'); // Save Core Details
+
+    // Verify task moves to "In Progress" column (on_my_plate) and shows 60%
+    const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
+    await expect(inProgressColumn).toContainText('Verify Mocked IPC');
+    await expect(
+      inProgressColumn.locator('.task-card:has-text("Verify Mocked IPC")'),
+    ).toContainText('60%');
+
+    // 3. Add date-associated history note
+    await taskAction(inProgressColumn, 'Verify Mocked IPC', 'edit').click();
+    await page.fill('#new-note-text-input', 'Mocking Tauri listen / event channels');
+    await page.fill('#new-note-percent-range', '90'); // Set note progress to 90%
+    await page.click('button:has-text("Log Note")');
+
+    // Verify note is added to notes list
+    await expect(visibleModal(page)).toContainText('Mocking Tauri listen / event channels');
+    await page.click('button:has-text("Cancel")');
+
+    // 4. Delete task
+    await taskAction(inProgressColumn, 'Verify Mocked IPC', 'delete').click();
+    await confirmTaskDelete(page);
+    await expect(inProgressColumn).not.toContainText('Verify Mocked IPC');
+
+    // 5. Restore task from Trash Bin
+    await sidebarItem(page, 'Trash Bin').click();
+    await expect(visibleModal(page)).toContainText('Verify Mocked IPC');
+    await visibleModal(page).getByRole('button', { name: 'Restore' }).click();
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
+
+    // Verify task is back in Dashboard under In Progress column (since it was restored to its last state)
+    await expect(inProgressColumn).toContainText('Verify Mocked IPC');
+
+    // 6. Purge task permanently
+    await taskAction(inProgressColumn, 'Verify Mocked IPC', 'delete').click();
+    await confirmTaskDelete(page);
+    await sidebarItem(page, 'Trash Bin').click();
+    await visibleModal(page).getByRole('button', { name: 'Purge' }).click();
+    await expect(visibleModal(page)).not.toContainText('Verify Mocked IPC');
+    await visibleModal(page).getByRole('button', { name: 'Close' }).click();
   });
 
   test('Plan Tomorrow carry over and carry over errors', async ({ page }) => {
@@ -201,8 +162,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
         return originalInvoke(cmd, args);
       };
     });
-    expectedMessage = 'Failed to toggle carry-over';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'Failed to toggle carry-over';
+    dialog.action = 'accept';
     const dialogPromise = page.waitForEvent('dialog');
     // Use page.click instead of page.uncheck since controlled state doesn't change on failure
     await visibleModal(page).locator('.ui.checkbox').first().click();
@@ -213,9 +174,11 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     // Plan Tomorrow empty carry-over state (delete uncompleted tasks to empty it)
     const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
     await taskAction(inProgressColumn, 'E2E Testing Implementation', 'delete').click();
+    await confirmTaskDelete(page);
 
     const todoColumn = page.locator('.column-card:has-text("On My Plate")');
     await taskAction(todoColumn, 'Read book chapter', 'delete').click();
+    await confirmTaskDelete(page);
 
     await page.click('button:has-text("Plan Tomorrow")');
     await expect(visibleModal(page)).toContainText(
@@ -336,8 +299,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await editNotePanel.getByRole('button', { name: 'Cancel' }).click();
 
     // Dismiss note deletion prompt
-    expectedMessage = 'Are you sure you want to delete this note?';
-    dialogAction = 'dismiss';
+    dialog.expectedMessage = 'Are you sure you want to delete this note?';
+    dialog.action = 'dismiss';
     await visibleModal(page)
       .locator('.glass-panel:has-text("Updated inline note text") button')
       .nth(1)
@@ -345,8 +308,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await expect(visibleModal(page)).toContainText('Updated inline note text');
 
     // Accept note deletion
-    expectedMessage = 'Are you sure you want to delete this note?';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'Are you sure you want to delete this note?';
+    dialog.action = 'accept';
     await visibleModal(page)
       .locator('.glass-panel:has-text("Updated inline note text") button')
       .nth(1)
@@ -383,8 +346,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
 
     // 1. Log note fail alert
     await page.fill('#new-note-text-input', 'Fail note content');
-    expectedMessage = 'Failed to add note';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'Failed to add note';
+    dialog.action = 'accept';
     let dialogPromise = page.waitForEvent('dialog');
     await page.click('button:has-text("Log Note")');
     await dialogPromise;
@@ -397,8 +360,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await visibleModal(page)
       .locator('.glass-panel:has(select[id^="edit-note-status-"]) input[type="text"]')
       .fill('Fail note edit content');
-    expectedMessage = 'Failed to update note';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'Failed to update note';
+    dialog.action = 'accept';
     dialogPromise = page.waitForEvent('dialog');
     await visibleModal(page).getByRole('button', { name: 'Save', exact: true }).click();
     await dialogPromise;
@@ -461,16 +424,16 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await sidebarItem(page, 'Trash Bin').click();
 
     // Purge project - dismiss
-    expectedMessage = 'WARNING: This will permanently delete this project';
-    dialogAction = 'dismiss';
+    dialog.expectedMessage = 'WARNING: This will permanently delete this project';
+    dialog.action = 'dismiss';
     await visibleModal(page)
       .locator('.glass-panel:has-text("Personal") button:has-text("Purge")')
       .click();
     await expect(visibleModal(page)).toContainText('Personal');
 
     // Purge project - accept
-    expectedMessage = 'WARNING: This will permanently delete this project';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'WARNING: This will permanently delete this project';
+    dialog.action = 'accept';
     await visibleModal(page)
       .locator('.glass-panel:has-text("Personal") button:has-text("Purge")')
       .click();
@@ -527,8 +490,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     });
     await page.locator('.sidebar-header button:visible').first().click();
     await page.fill('#p-name', 'Error Project');
-    expectedMessage = 'Failed to create project';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'Failed to create project';
+    dialog.action = 'accept';
     let dialogPromise = page.waitForEvent('dialog');
     await page.click('button:has-text("Create Project")');
     await dialogPromise;
@@ -546,8 +509,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     });
     await page.click('button:has-text("Add Task")');
     await page.fill('#t-title', 'Error Task');
-    expectedMessage = 'Failed to save task';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'Failed to save task';
+    dialog.action = 'accept';
     dialogPromise = page.waitForEvent('dialog');
     await page.click('button[type="submit"]');
     await dialogPromise;
@@ -565,8 +528,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     });
     const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
     await taskAction(inProgressColumn, 'E2E Testing Implementation', 'edit').click();
-    expectedMessage = 'Failed to save task';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'Failed to save task';
+    dialog.action = 'accept';
     dialogPromise = page.waitForEvent('dialog');
     await page.click('button[type="submit"]');
     await dialogPromise;
@@ -583,8 +546,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
       };
     });
     await sidebarItem(page, 'Work').click();
-    expectedMessage = 'Failed to archive project';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'Failed to archive project';
+    dialog.action = 'accept';
     dialogPromise = page.waitForEvent('dialog');
     await page.click('button[title="Archive Project"]');
     await dialogPromise;
@@ -600,8 +563,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
       };
     });
     await page.click('button[title="Delete Project"]');
-    expectedMessage = 'Failed to delete project';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'Failed to delete project';
+    dialog.action = 'accept';
     dialogPromise = page.waitForEvent('dialog');
     await page.click('button:has-text("Yes, Delete Project and Tasks")');
     await dialogPromise;
@@ -622,7 +585,13 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
         return originalInvoke(cmd, args);
       };
     });
+    dialog.expectedMessage = 'Failed to delete task';
+    dialog.action = 'accept';
+    dialogPromise = page.waitForEvent('dialog');
     await taskAction(inProgressColumn, 'E2E Testing Implementation', 'delete').click();
+    await confirmTaskDelete(page);
+    await dialogPromise;
+    await taskDeleteModal(page).getByRole('button', { name: 'Cancel' }).click();
 
     // 7. Unarchive & Delete archived failures
     await page.evaluate(() => {
@@ -643,8 +612,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
       };
     });
     await sidebarItem(page, 'Archived Projects').click();
-    expectedMessage = 'Failed to unarchive project';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'Failed to unarchive project';
+    dialog.action = 'accept';
     dialogPromise = page.waitForEvent('dialog');
     await visibleModal(page).getByRole('button', { name: 'Restore Project' }).click();
     await dialogPromise;
@@ -726,8 +695,8 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
         return originalInvoke(cmd, args);
       };
     });
-    expectedMessage = 'Failed to move task';
-    dialogAction = 'accept';
+    dialog.expectedMessage = 'Failed to move task';
+    dialog.action = 'accept';
     const dialogPromise = page.waitForEvent('dialog');
     await page.dragAndDrop(
       '.task-card:has-text("Read book chapter")',
@@ -751,117 +720,89 @@ test.describe('Memor E2E Coverage Expansion Suite', () => {
     await page.click('button:has-text("Go to Today")');
   });
 
-  test('Summary View re-click, date change and failures', async ({ page }) => {
-    await page.goto('/');
-    await page.fill('#master-password', 'password123');
-    await page.click('button[type="submit"]');
+  test('empty dashboard forms stay open and priority checkboxes remain coupled', async ({
+    page,
+  }) => {
+    await login(page);
 
-    await page.click('button:has-text("Summaries")');
-    await expect(page.locator('.view-title')).toContainText('Productivity Summaries');
+    await page.locator('.sidebar-header button:visible').first().click();
+    await page.click('button:has-text("Create Project")');
+    await expect(visibleModal(page).locator('h3')).toHaveText('Create New Project');
+    await visibleModal(page).getByRole('button', { name: 'Cancel' }).click();
 
-    await page.click('button:has-text("Daily")');
+    await page.click('button:has-text("Add Task")');
+    await page.click('button:has-text("Create Task")');
+    await expect(visibleModal(page).locator('h3')).toHaveText('Add New Task');
 
-    await page.fill('input[type="date"]', '2026-05-24');
+    const dailyCheckbox = page.locator('#task-daily-priority-checkbox');
+    const weeklyCheckbox = page.locator('#task-weekly-priority-checkbox');
+    await page.locator('.ui.checkbox:has(#task-weekly-priority-checkbox)').click();
+    await page.locator('.ui.checkbox:has(#task-weekly-priority-checkbox)').click();
+    await expect(dailyCheckbox).not.toBeChecked();
 
-    await page.evaluate(() => {
-      const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
-      (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
-        if (cmd === 'get_daily_summary' || cmd === 'get_weekly_summary') {
-          throw new Error('Summary retrieval failed');
-        }
-        return originalInvoke(cmd, args);
-      };
-    });
-    await page.click('button:has-text("Weekly")');
-    await expect(page.locator('.ui.negative.message')).toContainText('Summary retrieval failed');
+    await page.locator('.ui.checkbox:has(#task-daily-priority-checkbox)').click();
+    await expect(weeklyCheckbox).toBeChecked();
+
+    await page.locator('.ui.checkbox:has(#task-weekly-priority-checkbox)').click();
+    await expect(dailyCheckbox).not.toBeChecked();
+    await expect(weeklyCheckbox).not.toBeChecked();
+
+    await visibleModal(page).getByRole('button', { name: 'Cancel' }).click();
   });
 
-  test('Timeline View re-fetch on background event and errors', async ({ page }) => {
-    await page.addInitScript(() => {
-      (window as any).__tasksChangedCallbacks = [];
-      const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
-      (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
-        if (cmd === 'plugin:event|listen' && args && args.event === 'tasks-changed') {
-          (window as any).__tasksChangedCallbacks.push(args.handler);
-        }
-        return originalInvoke ? originalInvoke(cmd, args) : undefined;
-      };
+  test('past date banner allows dated task creation and returns to today', async ({ page }) => {
+    await login(page);
 
-      (window as any).__rawCallbacks = (window as any).__rawCallbacks || {};
-      const originalTransform = (window as any).__TAURI_INTERNALS__.transformCallback;
-      (window as any).__TAURI_INTERNALS__.transformCallback = (callback: any, once = false) => {
-        const id = originalTransform(callback, once);
-        (window as any).__rawCallbacks[id] = callback;
-        return id;
-      };
-    });
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-    await page.goto('/');
-    await page.fill('#master-password', 'password123');
-    await page.click('button[type="submit"]');
+    await page.fill('.dashboard-view input[type="date"]', yesterdayStr);
+    await expect(page.locator('.dashboard-view')).toContainText(
+      `Viewing past date: ${yesterdayStr}`,
+    );
 
-    await page.click('button:has-text("Activity")');
-    await expect(page.locator('.view-title')).toContainText('Task Activity Timeline');
+    await page.click('button:has-text("Add Task")');
+    await page.fill('#t-title', 'Backfill yesterday retro');
+    await page.click('button:has-text("Create Task")');
 
-    // Trigger background event listener
-    await page.evaluate(() => {
-      const callbacks = (window as any).__tasksChangedCallbacks;
-      const rawCbs = (window as any).__rawCallbacks;
-      callbacks.forEach((handlerId: number) => {
-        const cb = rawCbs[handlerId];
-        if (cb) {
-          cb({ event: 'tasks-changed', payload: null });
-        }
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const tasks = JSON.parse(sessionStorage.getItem('memor_db_tasks') || '[]');
+          return tasks.find((task: any) => task.title === 'Backfill yesterday retro');
+        }),
+      )
+      .toMatchObject({
+        title: 'Backfill yesterday retro',
+        created_at: `${yesterdayStr}T12:00:00`,
+        is_daily_priority: true,
       });
-    });
 
-    // Verify timeline view continues functioning
-    await expect(page.locator('.view-title')).toContainText('Task Activity Timeline');
+    await page.click('button:has-text("Go to Today")');
+    await expect(page.locator('.dashboard-view')).not.toContainText('Viewing past date:');
   });
 
-  test('Timeline failures and invalid date fallbacks', async ({ page }) => {
-    await page.addInitScript(() => {
-      (window as any).__TAURI_INTERNALS__ = (window as any).__TAURI_INTERNALS__ || {};
-      const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
-      (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
-        if (cmd === 'get_timeline') {
-          return [
-            {
-              id: 999,
-              task_id: 101,
-              task_title: 'Fallback Date Task',
-              date: 'not-a-valid-date-format',
-              update_text: 'Logged progress with fallback date',
-              completion_percentage: 45,
-              status: 'unknown_status',
-              created_at: '2026-05-31 12:00:00',
-            },
-          ];
-        }
-        return originalInvoke ? originalInvoke(cmd, args) : undefined;
-      };
-    });
+  test('core task status and progress controls synchronize while editing', async ({ page }) => {
+    await login(page);
 
-    await page.goto('/');
-    await page.fill('#master-password', 'password123');
-    await page.click('button[type="submit"]');
+    await sidebarItem(page, 'Weekly Focus').click();
+    const todoColumn = page.locator('.column-card:has-text("On My Plate")');
+    await taskAction(todoColumn, 'Buy groceries', 'edit').click();
 
-    await page.click('button:has-text("Activity")');
-    await expect(page.locator('.summary-container')).toContainText('not-a-valid-date-format');
-    await expect(page.locator('.summary-container')).toContainText('Fallback Date Task');
+    const statusSelect = selectInPrimaryModalFormByOption(page, 'Done');
+    await changeSelectValue(statusSelect, 'done');
+    await expect(taskCompletionRange(page)).toHaveValue('100');
 
-    // Error state
-    await page.evaluate(() => {
-      const originalInvoke = (window as any).__TAURI_INTERNALS__.invoke;
-      (window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args: any) => {
-        if (cmd === 'get_timeline') {
-          throw new Error('Timeline fetch failed');
-        }
-        return originalInvoke(cmd, args);
-      };
-    });
-    await page.click('button:has-text("Dashboard")');
-    await page.click('button:has-text("Activity")');
-    await expect(page.locator('.ui.negative.message')).toContainText('Timeline fetch failed');
+    await setRangeValue(page, 'input[aria-labelledby="t-percent-label"]', '50');
+    await expect(statusSelect).toHaveValue('in_progress');
+
+    await page.click('button:has-text("Save Core Details")');
+
+    const inProgressColumn = page.locator('.column-card:has-text("In Progress")');
+    await expect(inProgressColumn).toContainText('Buy groceries');
+    await expect(inProgressColumn.locator('.task-card:has-text("Buy groceries")')).toContainText(
+      '50%',
+    );
   });
 });
