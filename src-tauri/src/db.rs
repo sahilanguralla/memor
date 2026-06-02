@@ -168,14 +168,33 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     )?;
 
     // Safe alterations
-    if let Err(e) = conn.execute(
-        "ALTER TABLE tasks ADD COLUMN completion_percentage INTEGER DEFAULT 0;",
-        [],
-    ) {
-        eprintln!("Migration completion_percentage warning/error: {:?}", e);
+    let has_completion_percentage: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('tasks') WHERE name='completion_percentage');",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if !has_completion_percentage {
+        if let Err(e) = conn.execute(
+            "ALTER TABLE tasks ADD COLUMN completion_percentage INTEGER DEFAULT 0;",
+            [],
+        ) {
+            eprintln!("Migration completion_percentage warning/error: {:?}", e);
+        }
     }
-    if let Err(e) = conn.execute("ALTER TABLE tasks ADD COLUMN created_at DATETIME;", []) {
-        eprintln!("Migration created_at warning/error: {:?}", e);
+
+    let has_created_at: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('tasks') WHERE name='created_at');",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if !has_created_at {
+        if let Err(e) = conn.execute("ALTER TABLE tasks ADD COLUMN created_at DATETIME;", []) {
+            eprintln!("Migration created_at warning/error: {:?}", e);
+        }
     }
     let _ = conn.execute("UPDATE tasks SET created_at = COALESCE(updated_at, CURRENT_TIMESTAMP) WHERE created_at IS NULL;", []);
 

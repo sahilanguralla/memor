@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { Modal, Form, Button, Checkbox, Label, Segment, Grid, Input } from 'semantic-ui-react';
 import { Project, Task, TaskUpdate, ArchivedProject, TrashResponse } from '../../domain/types';
 import { showAlert, showConfirm } from '../../shared/utils/dialogs';
 import { DashboardHeader } from './components/DashboardHeader';
@@ -10,7 +11,7 @@ import { getPriorityLabel } from './utils';
 
 interface DashboardProps {
   projects: Project[];
-  refreshData: (date?: string) => void;
+  refreshData: (date?: string) => Promise<void>;
   selectedDate: string;
   setSelectedDate: (date: string) => void;
 }
@@ -43,9 +44,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [trashItems, setTrashItems] = useState<TrashResponse | null>(null);
   const [trashRetentionDays, setTrashRetentionDays] = useState<number>(30);
   const [projectToDeleteId, setProjectToDeleteId] = useState<number | null>(null);
+  const [taskToDeleteId, setTaskToDeleteId] = useState<number | null>(null);
 
   const projectNameInputRef = useRef<HTMLInputElement>(null);
   const taskTitleInputRef = useRef<HTMLInputElement>(null);
+  const draggedTaskIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (showProjectModal) {
@@ -386,10 +389,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Handle Task Deletion
   const handleDeleteTask = async (taskId: number) => {
-    if (!showConfirm('Are you sure you want to delete this task?')) return;
+    setTaskToDeleteId(taskId);
+  };
+
+  const handleConfirmDeleteTask = async () => {
+    if (!taskToDeleteId) return;
     try {
-      await invoke('delete_task', { id: taskId });
-      refreshData(selectedDate);
+      await invoke('delete_task', { id: taskToDeleteId });
+      setTaskToDeleteId(null);
+      await refreshData(selectedDate);
     } catch (err) {
       showAlert(`Failed to delete task: ${err}`);
     }
@@ -397,12 +405,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Drag and Drop implementation
   const handleDragStart = (e: React.DragEvent, taskId: number) => {
+    draggedTaskIdRef.current = taskId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-memor-task-id', taskId.toString());
     e.dataTransfer.setData('text/plain', taskId.toString());
   };
 
   const handleDrop = async (e: React.DragEvent, targetStatus: TaskStatus) => {
     e.preventDefault();
-    const taskId = Number(e.dataTransfer.getData('text/plain'));
+    const taskId = Number(
+      e.dataTransfer.getData('application/x-memor-task-id') ||
+        e.dataTransfer.getData('text/plain') ||
+        draggedTaskIdRef.current,
+    );
     if (!taskId) return;
 
     let foundTask: Task | null = null;
@@ -421,7 +436,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     if (foundTask) {
       try {
-        const newPercent = targetStatus === 'done' ? 100 : undefined;
+        let newPercent: number;
+        if (targetStatus === 'done') {
+          newPercent = 100;
+        } else if (targetStatus === 'todo') {
+          newPercent = 0;
+        } else {
+          newPercent = Math.min((foundTask as Task).completion_percentage, 99);
+        }
         await invoke('update_task', {
           id: taskId,
           projectId: foundProjId,
@@ -433,10 +455,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           completionPercentage: newPercent,
           date: selectedDate,
         });
-        refreshData(selectedDate);
+        await refreshData(selectedDate);
       } catch (err) {
         showAlert(`Failed to move task: ${err}`);
+      } finally {
+        draggedTaskIdRef.current = null;
       }
+    } else {
+      draggedTaskIdRef.current = null;
     }
   };
 
@@ -477,6 +503,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const currentTasks = getFilteredTasks();
+  const taskToDelete = projects
+    .flatMap((project) => [
+      ...project.tasks.needs_to_do,
+      ...project.tasks.on_my_plate,
+      ...project.tasks.done,
+    ])
+    .find((task) => task.task_id === taskToDeleteId);
 
   // Note actions
   const handleAddNote = async (e: React.FormEvent) => {
@@ -595,14 +628,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
               ⚠️ Viewing past date: <strong>{selectedDate}</strong>. Changes will be logged for this
               day.
             </span>
-            <button
+            <Button
               type="button"
-              className="btn btn-secondary"
+              basic
               onClick={() => setSelectedDate(todayStr)}
-              style={{ padding: '4px 10px', fontSize: '12px' }}
+              style={{ padding: '6px 12px', fontSize: '12px', margin: 0 }}
             >
               Go to Today
-            </button>
+            </Button>
           </div>
         )}
 
@@ -635,1070 +668,1260 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* CREATE PROJECT MODAL */}
-      {showProjectModal && (
-        <div className="modal-overlay">
-          <div className="modal-content glass-panel">
-            <h3 className="modal-header">Create New Project</h3>
-            <form
-              onSubmit={handleCreateProject}
-              style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
-            >
-              <div className="form-group">
-                <label htmlFor="p-name">
-                  Project Name
-                  <input
-                    type="text"
-                    id="p-name"
-                    ref={projectNameInputRef}
-                    className="form-input"
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    placeholder="e.g. Project Apollo"
-                    required
-                  />
-                </label>
-              </div>
-              <div className="form-group">
-                <label htmlFor="p-priority">
-                  Project Priority
-                  <select
-                    id="p-priority"
-                    className="form-select"
-                    value={projectPriority}
-                    onChange={(e) => setProjectPriority(Number(e.target.value))}
-                  >
-                    <option value={0}>Low Priority</option>
-                    <option value={1}>Medium Priority</option>
-                    <option value={2}>High Priority</option>
-                  </select>
-                </label>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '12px',
-                  justifyContent: 'flex-end',
-                  marginTop: '8px',
-                }}
-              >
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowProjectModal(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Create Project
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* PLAN TOMORROW MODAL */}
-      {showPlanTomorrowModal && (
-        <div className="modal-overlay">
-          <div className="modal-content glass-panel" style={{ maxWidth: '560px' }}>
-            <h3
-              className="modal-header"
-              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              🔮 Plan Tomorrow&apos;s Carry-Over
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-med)', marginTop: '-8px' }}>
-              Toggle carry-over for today&apos;s active priorities that aren&apos;t completed yet.
-              Supported tasks will copy to tomorrow.
-            </p>
-            <div
+      <Modal
+        open={showProjectModal}
+        onClose={() => setShowProjectModal(false)}
+        size="tiny"
+        style={{
+          background: 'var(--glass-bg)',
+          border: '1px solid var(--glass-border)',
+          color: 'var(--text-high)',
+        }}
+      >
+        <Modal.Header
+          as="h3"
+          style={{
+            background: 'transparent',
+            color: 'var(--text-high)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          Create New Project
+        </Modal.Header>
+        <Modal.Content style={{ background: 'transparent', color: 'var(--text-high)' }}>
+          <Form
+            onSubmit={handleCreateProject}
+            inverted
+            style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+          >
+            <Form.Field
+              label={{
+                content: 'Project Name',
+                style: { color: 'var(--text-med)', fontSize: '12px', fontWeight: 500 },
+              }}
+              control={Input}
+              id="p-name"
+              inputRef={projectNameInputRef}
+              value={projectName}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProjectName(e.target.value)}
+              placeholder="e.g. Project Apollo"
+              required
+              fluid
+            />
+            <Form.Field
+              label={{
+                content: 'Project Priority',
+                style: { color: 'var(--text-med)', fontSize: '12px', fontWeight: 500 },
+              }}
+              control="select"
+              className="ui dropdown"
+              value={projectPriority}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setProjectPriority(Number(e.target.value))
+              }
               style={{
-                maxHeight: '300px',
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                margin: '8px 0',
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid var(--glass-border)',
+                color: 'var(--text-high)',
+                padding: '10px 12px',
+                borderRadius: '6px',
+                fontSize: '14px',
+                outline: 'none',
+                width: '100%',
               }}
             >
-              {carryOverTasks.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-low)' }}>
-                  No uncompleted priorities on your day to plan!
-                </div>
-              ) : (
-                carryOverTasks.map((t) => (
-                  <div
-                    key={t.task_id}
-                    className="glass-panel"
-                    style={{
-                      padding: '12px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: '14px', fontWeight: '500' }}>{t.title}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-low)', marginTop: '2px' }}>
-                        Progress: {t.completion_percentage}% | Status: {t.status}
-                      </div>
-                    </div>
-                    <label
-                      className="form-checkbox"
-                      style={{ margin: 0 }}
-                      htmlFor={`planned-next-day-${t.task_id}`}
-                    >
-                      <input
-                        id={`planned-next-day-${t.task_id}`}
-                        type="checkbox"
-                        checked={t.planned_for_next_day}
-                        onChange={async (e) => {
-                          try {
-                            const pId = getTaskProjectIdVal(t);
-                            await invoke('update_task', {
-                              id: t.task_id,
-                              projectId: pId,
-                              title: t.title,
-                              status: t.status,
-                              projectPriority: t.project_priority,
-                              isDailyPriority: t.is_daily_priority,
-                              isWeeklyPriority: t.is_weekly_priority,
-                              completionPercentage: t.completion_percentage,
-                              updateText: null,
-                              date: selectedDate,
-                              plannedForNextDay: e.target.checked,
-                            });
-                            refreshData(selectedDate);
-                          } catch (err) {
-                            showAlert(`Failed to toggle carry-over: ${err}`);
-                          }
-                        }}
-                      />
-                      <span style={{ fontSize: '13px' }}>Carry over</span>
-                    </label>
-                  </div>
-                ))
-              )}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setShowPlanTomorrowModal(false)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CREATE/EDIT TASK MODAL */}
-      {showTaskModal && (
-        <div className="modal-overlay" style={{ overflowY: 'auto' }}>
-          <div
-            className="modal-content glass-panel"
-            style={{ maxWidth: '600px', margin: '40px auto' }}
-          >
-            <h3 className="modal-header">{editingTask ? 'Edit Task Details' : 'Add New Task'}</h3>
-            <form
-              onSubmit={handleSaveTask}
-              style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+              <option value={0}>Low Priority</option>
+              <option value={1}>Medium Priority</option>
+              <option value={2}>High Priority</option>
+            </Form.Field>
+            <div
+              style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}
             >
-              <div className="form-group">
-                <label htmlFor="t-title">
-                  Task Title
-                  <input
-                    type="text"
-                    id="t-title"
-                    ref={taskTitleInputRef}
-                    className="form-input"
-                    value={taskTitle}
-                    onChange={(e) => setTaskTitle(e.target.value)}
-                    placeholder="What needs to be done?"
-                    required
-                  />
-                </label>
+              <Button type="button" basic color="grey" onClick={() => setShowProjectModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" primary>
+                Create Project
+              </Button>
+            </div>
+          </Form>
+        </Modal.Content>
+      </Modal>
+
+      {/* PLAN TOMORROW MODAL */}
+      <Modal
+        open={showPlanTomorrowModal}
+        onClose={() => setShowPlanTomorrowModal(false)}
+        size="small"
+        style={{
+          background: 'var(--glass-bg)',
+          border: '1px solid var(--glass-border)',
+          color: 'var(--text-high)',
+        }}
+      >
+        <Modal.Header
+          as="h3"
+          style={{
+            background: 'transparent',
+            color: 'var(--text-high)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          🔮 Plan Tomorrow&apos;s Carry-Over
+        </Modal.Header>
+        <Modal.Content scrolling style={{ background: 'transparent', color: 'var(--text-high)' }}>
+          <p style={{ fontSize: '13px', color: 'var(--text-med)', marginTop: 0 }}>
+            Toggle carry-over for today&apos;s active priorities that aren&apos;t completed yet.
+            Supported tasks will copy to tomorrow.
+          </p>
+          <div
+            style={{
+              maxHeight: '300px',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              margin: '8px 0',
+            }}
+          >
+            {carryOverTasks.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-low)' }}>
+                No uncompleted priorities on your day to plan!
               </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div className="form-group">
-                  <label htmlFor="t-proj">
-                    Project
-                    <select
-                      id="t-proj"
-                      className="form-select"
-                      value={taskProjectId}
-                      onChange={(e) => setTaskProjectId(e.target.value)}
-                    >
-                      {projects.map((p) => (
-                        <option
-                          key={p.project_id ?? 'adhoc'}
-                          value={p.project_id !== null ? p.project_id.toString() : 'adhoc'}
-                        >
-                          {p.project_name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="t-priority">
-                    Overall Task Priority
-                    <select
-                      id="t-priority"
-                      className="form-select"
-                      value={taskProjectPriority}
-                      onChange={(e) => setTaskProjectPriority(Number(e.target.value))}
-                    >
-                      <option value={0}>Low Priority</option>
-                      <option value={1}>Medium Priority</option>
-                      <option value={2}>High Priority</option>
-                    </select>
-                  </label>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                {editingTask && (
-                  <div className="form-group">
-                    <label htmlFor="t-status">
-                      Status
-                      <select
-                        id="t-status"
-                        className="form-select"
-                        value={taskStatus}
-                        onChange={(e) => {
-                          const statusVal = e.target.value as 'todo' | 'in_progress' | 'done';
-                          setTaskStatus(statusVal);
-                          if (statusVal === 'done') {
-                            setTaskPercent(100);
-                          }
-                        }}
-                      >
-                        <option value="todo">On My Plate (Todo)</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="done">Done</option>
-                      </select>
-                    </label>
-                  </div>
-                )}
-
-                <div className="form-group">
-                  <label htmlFor="t-percent">
-                    Completion Percentage ({taskPercent}%)
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <input
-                        type="range"
-                        id="t-percent"
-                        min="0"
-                        max="100"
-                        value={taskPercent}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setTaskPercent(val);
-                          if (val === 100) {
-                            setTaskStatus('done');
-                          } else if (editingTask && taskStatus === 'done') {
-                            setTaskStatus('in_progress');
-                          }
-                        }}
-                        style={{ flex: 1, accentColor: 'var(--primary)' }}
-                      />
-                      <span style={{ fontSize: '14px', fontWeight: '600', width: '36px' }}>
-                        {taskPercent}%
-                      </span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '20px', marginTop: '2px' }}>
-                <label className="form-checkbox" htmlFor="task-daily-priority-checkbox">
-                  <input
-                    id="task-daily-priority-checkbox"
-                    type="checkbox"
-                    checked={taskDailyPriority}
-                    onChange={(e) => {
-                      const { checked } = e.target;
-                      setTaskDailyPriority(checked);
-                      if (checked) {
-                        setTaskWeeklyPriority(true);
-                      }
-                    }}
-                  />
-                  <span>☀️ Add to My Day</span>
-                </label>
-
-                <label className="form-checkbox" htmlFor="task-weekly-priority-checkbox">
-                  <input
-                    id="task-weekly-priority-checkbox"
-                    type="checkbox"
-                    checked={taskWeeklyPriority}
-                    onChange={(e) => {
-                      const { checked } = e.target;
-                      setTaskWeeklyPriority(checked);
-                      if (!checked) {
-                        setTaskDailyPriority(false);
-                      }
-                    }}
-                  />
-                  <span>📅 Add to Weekly Focus</span>
-                </label>
-              </div>
-
-              {editingTask && (
-                <div className="form-group">
-                  <label htmlFor="t-comment">
-                    Add a Quick Update Log Note (Optional)
-                    <input
-                      type="text"
-                      id="t-comment"
-                      className="form-input"
-                      value={taskComment}
-                      onChange={(e) => setTaskComment(e.target.value)}
-                      placeholder="Describe what you worked on..."
-                    />
-                  </label>
-                </div>
-              )}
-
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '12px',
-                  justifyContent: 'flex-end',
-                  marginTop: '6px',
-                }}
-              >
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setShowTaskModal(false);
-                    setEditingTask(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingTask ? 'Save Core Details' : 'Create Task'}
-                </button>
-              </div>
-            </form>
-
-            {/* Task Logs / Notes CRUD Panel */}
-            {editingTask && (
-              <div
-                style={{
-                  borderTop: '1px solid rgba(255,255,255,0.08)',
-                  marginTop: '16px',
-                  paddingTop: '16px',
-                }}
-              >
-                <h4
-                  style={{
-                    fontSize: '15px',
-                    fontWeight: '600',
-                    color: 'var(--text-high)',
-                    marginBottom: '4px',
-                  }}
-                >
-                  📜 Task Updates History & Daily Notes
-                </h4>
-                <p style={{ fontSize: '12px', color: 'var(--text-med)', marginBottom: '12px' }}>
-                  Add date-associated logs below. Updates affect the progress on their logged dates.
-                </p>
-
-                {/* Add note inline form */}
-                <form
-                  onSubmit={handleAddNote}
+            ) : (
+              carryOverTasks.map((t) => (
+                <Segment
+                  key={t.task_id}
                   className="glass-panel"
                   style={{
                     padding: '12px',
-                    marginBottom: '16px',
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: 'rgba(30, 41, 59, 0.3)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: '8px',
+                    margin: 0,
                   }}
                 >
-                  <label htmlFor="new-note-text-input">
-                    <div
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-high)' }}>
+                      {t.title}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-low)', marginTop: '2px' }}>
+                      Progress: {t.completion_percentage}% | Status: {t.status}
+                    </div>
+                  </div>
+                  <Checkbox
+                    id={`planned-next-day-${t.task_id}`}
+                    label="Carry over"
+                    checked={t.planned_for_next_day}
+                    onChange={async (_, data) => {
+                      try {
+                        const pId = getTaskProjectIdVal(t);
+                        await invoke('update_task', {
+                          id: t.task_id,
+                          projectId: pId,
+                          title: t.title,
+                          status: t.status,
+                          projectPriority: t.project_priority,
+                          isDailyPriority: t.is_daily_priority,
+                          isWeeklyPriority: t.is_weekly_priority,
+                          completionPercentage: t.completion_percentage,
+                          updateText: null,
+                          date: selectedDate,
+                          plannedForNextDay: Boolean(data.checked),
+                        });
+                        refreshData(selectedDate);
+                      } catch (err) {
+                        showAlert(`Failed to toggle carry-over: ${err}`);
+                      }
+                    }}
+                  />
+                </Segment>
+              ))
+            )}
+          </div>
+        </Modal.Content>
+        <Modal.Actions
+          style={{ background: 'transparent', borderTop: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <Button basic color="grey" onClick={() => setShowPlanTomorrowModal(false)}>
+            Close
+          </Button>
+        </Modal.Actions>
+      </Modal>
+
+      {/* CREATE/EDIT TASK MODAL */}
+      <Modal
+        open={showTaskModal}
+        onClose={() => {
+          setShowTaskModal(false);
+          setEditingTask(null);
+        }}
+        size="small"
+        style={{
+          background: 'var(--glass-bg)',
+          border: '1px solid var(--glass-border)',
+          color: 'var(--text-high)',
+        }}
+      >
+        <Modal.Header
+          as="h3"
+          style={{
+            background: 'transparent',
+            color: 'var(--text-high)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          {editingTask ? 'Edit Task Details' : 'Add New Task'}
+        </Modal.Header>
+        <Modal.Content scrolling style={{ background: 'transparent', color: 'var(--text-high)' }}>
+          <Form
+            onSubmit={handleSaveTask}
+            inverted
+            style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+          >
+            <Form.Field
+              label={{
+                content: 'Task Title',
+                style: { color: 'var(--text-med)', fontSize: '12px', fontWeight: 500 },
+              }}
+              control={Input}
+              id="t-title"
+              inputRef={taskTitleInputRef}
+              value={taskTitle}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTaskTitle(e.target.value)}
+              placeholder="What needs to be done?"
+              required
+              fluid
+            />
+
+            <Grid columns={2} stackable>
+              <Grid.Column style={{ padding: '0 10px' }}>
+                <Form.Field
+                  label={{
+                    content: 'Project',
+                    style: { color: 'var(--text-med)', fontSize: '12px', fontWeight: 500 },
+                  }}
+                  control="select"
+                  className="ui dropdown"
+                  value={taskProjectId}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                    setTaskProjectId(e.target.value)
+                  }
+                  style={{
+                    background: 'rgba(15, 23, 42, 0.6)',
+                    border: '1px solid var(--glass-border)',
+                    color: 'var(--text-high)',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    width: '100%',
+                    outline: 'none',
+                  }}
+                >
+                  {projects.map((p) => (
+                    <option
+                      key={p.project_id ?? 'adhoc'}
+                      value={p.project_id !== null ? p.project_id.toString() : 'adhoc'}
+                    >
+                      {p.project_name}
+                    </option>
+                  ))}
+                </Form.Field>
+              </Grid.Column>
+
+              <Grid.Column style={{ padding: '0 10px' }}>
+                <Form.Field
+                  label={{
+                    content: 'Overall Task Priority',
+                    style: { color: 'var(--text-med)', fontSize: '12px', fontWeight: 500 },
+                  }}
+                  control="select"
+                  className="ui dropdown"
+                  value={taskProjectPriority}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                    setTaskProjectPriority(Number(e.target.value))
+                  }
+                  style={{
+                    background: 'rgba(15, 23, 42, 0.6)',
+                    border: '1px solid var(--glass-border)',
+                    color: 'var(--text-high)',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    width: '100%',
+                    outline: 'none',
+                  }}
+                >
+                  <option value={0}>Low Priority</option>
+                  <option value={1}>Medium Priority</option>
+                  <option value={2}>High Priority</option>
+                </Form.Field>
+              </Grid.Column>
+            </Grid>
+
+            <Grid columns={editingTask ? 2 : 1} stackable>
+              {editingTask && (
+                <Grid.Column style={{ padding: '0 10px' }}>
+                  <Form.Field
+                    label={{
+                      content: 'Status',
+                      style: { color: 'var(--text-med)', fontSize: '12px', fontWeight: 500 },
+                    }}
+                    control="select"
+                    className="ui dropdown"
+                    value={taskStatus}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                      const statusVal = e.target.value as 'todo' | 'in_progress' | 'done';
+                      setTaskStatus(statusVal);
+                      if (statusVal === 'done') {
+                        setTaskPercent(100);
+                      }
+                    }}
+                    style={{
+                      background: 'rgba(15, 23, 42, 0.6)',
+                      border: '1px solid var(--glass-border)',
+                      color: 'var(--text-high)',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      width: '100%',
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="todo">On My Plate (Todo)</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="done">Done</option>
+                  </Form.Field>
+                </Grid.Column>
+              )}
+
+              <Grid.Column style={{ padding: '0 10px' }}>
+                <Form.Field>
+                  <div
+                    style={{ color: 'var(--text-med)', fontSize: '12px', fontWeight: 500 }}
+                    id="t-percent-label"
+                  >
+                    {`Completion Percentage (${taskPercent}%)`}
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      marginTop: '6px',
+                    }}
+                  >
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={taskPercent}
+                      aria-labelledby="t-percent-label"
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setTaskPercent(val);
+                        if (val === 100) {
+                          setTaskStatus('done');
+                        } else if (editingTask && taskStatus === 'done') {
+                          setTaskStatus('in_progress');
+                        }
+                      }}
+                      style={{ flex: 1, accentColor: 'var(--primary)' }}
+                    />
+                    <span
                       style={{
-                        fontSize: '12px',
+                        fontSize: '14px',
                         fontWeight: '600',
-                        color: 'var(--primary)',
-                        marginBottom: '4px',
+                        width: '36px',
+                        color: 'var(--text-high)',
                       }}
                     >
-                      ✏️ Add Log Note for {selectedDate}
-                    </div>
-                    <input
-                      id="new-note-text-input"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Completed initial OAuth boilerplate code"
-                      value={newNoteText}
-                      onChange={(e) => setNewNoteText(e.target.value)}
-                      required
-                    />
-                  </label>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <label
-                        style={{ fontSize: '11px', color: 'var(--text-low)', whiteSpace: 'nowrap' }}
-                        htmlFor="new-note-percent-range"
-                      >
-                        Note Progress:
-                        <input
-                          id="new-note-percent-range"
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={newNotePercent}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setNewNotePercent(val);
-                            if (val === 100) {
-                              setNewNoteStatus('done');
-                            } else if (newNoteStatus === 'done') {
-                              setNewNoteStatus('in_progress');
-                            }
-                          }}
-                          style={{ flex: 1, accentColor: 'var(--primary)' }}
-                        />
-                      </label>
-                      <span style={{ fontSize: '12px', fontWeight: '600' }}>{newNotePercent}%</span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <label
-                        style={{ fontSize: '11px', color: 'var(--text-low)' }}
-                        htmlFor="new-note-status-select"
-                      >
-                        Status:
-                        <select
-                          id="new-note-status-select"
-                          className="form-select"
-                          style={{ padding: '4px 8px', fontSize: '12px' }}
-                          value={newNoteStatus}
-                          onChange={(e) => {
-                            const s = e.target.value as 'todo' | 'in_progress' | 'done';
-                            setNewNoteStatus(s);
-                            if (s === 'done') {
-                              setNewNotePercent(100);
-                            } else if (s === 'todo') {
-                              setNewNotePercent(0);
-                            }
-                          }}
-                        >
-                          <option value="todo">Todo</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="done">Done</option>
-                        </select>
-                      </label>
-                    </div>
-                    <button
-                      type="submit"
-                      className="btn btn-primary"
-                      style={{ padding: '4px 12px', fontSize: '12px' }}
-                    >
-                      Log Note
-                    </button>
+                      {taskPercent}%
+                    </span>
                   </div>
-                </form>
+                </Form.Field>
+              </Grid.Column>
+            </Grid>
 
-                {/* Notes list */}
+            <div style={{ display: 'flex', gap: '20px', margin: '8px 0' }}>
+              <Checkbox
+                id="task-daily-priority-checkbox"
+                label="☀️ Add to My Day"
+                checked={taskDailyPriority}
+                onChange={(_, data) => {
+                  const checked = Boolean(data.checked);
+                  setTaskDailyPriority(checked);
+                  if (checked) {
+                    setTaskWeeklyPriority(true);
+                  }
+                }}
+              />
+              <Checkbox
+                id="task-weekly-priority-checkbox"
+                label="📅 Add to Weekly Focus"
+                checked={taskWeeklyPriority}
+                onChange={(_, data) => {
+                  const checked = Boolean(data.checked);
+                  setTaskWeeklyPriority(checked);
+                  if (!checked) {
+                    setTaskDailyPriority(false);
+                  }
+                }}
+              />
+            </div>
+
+            {editingTask && (
+              <Form.Field
+                label={{
+                  content: 'Add a Quick Update Log Note (Optional)',
+                  style: { color: 'var(--text-med)', fontSize: '12px', fontWeight: 500 },
+                }}
+                control={Input}
+                id="t-comment"
+                value={taskComment}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setTaskComment(e.target.value)
+                }
+                placeholder="Describe what you worked on..."
+                fluid
+              />
+            )}
+
+            <div
+              style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '6px' }}
+            >
+              <Button
+                type="button"
+                basic
+                color="grey"
+                onClick={() => {
+                  setShowTaskModal(false);
+                  setEditingTask(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" primary>
+                {editingTask ? 'Save Core Details' : 'Create Task'}
+              </Button>
+            </div>
+          </Form>
+
+          {/* Task Logs / Notes CRUD Panel */}
+          {editingTask && (
+            <div
+              style={{
+                borderTop: '1px solid rgba(255,255,255,0.08)',
+                marginTop: '16px',
+                paddingTop: '16px',
+              }}
+            >
+              <h4
+                style={{
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  color: 'var(--text-high)',
+                  marginBottom: '4px',
+                  margin: 0,
+                }}
+              >
+                📜 Task Updates History & Daily Notes
+              </h4>
+              <p
+                style={{
+                  fontSize: '12px',
+                  color: 'var(--text-med)',
+                  marginBottom: '12px',
+                  marginTop: '4px',
+                }}
+              >
+                Add date-associated logs below. Updates affect the progress on their logged dates.
+              </p>
+
+              {/* Add note inline form */}
+              <Form
+                onSubmit={handleAddNote}
+                className="glass-panel"
+                style={{
+                  padding: '12px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  background: 'rgba(30, 41, 59, 0.3)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '8px',
+                }}
+              >
+                <Form.Field>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      color: 'var(--primary)',
+                      marginBottom: '4px',
+                    }}
+                  >
+                    ✏️ Add Log Note for {selectedDate}
+                  </div>
+                  <Form.Input
+                    id="new-note-text-input"
+                    placeholder="e.g. Completed initial OAuth boilerplate code"
+                    value={newNoteText}
+                    onChange={(e) => setNewNoteText(e.target.value)}
+                    required
+                    fluid
+                  />
+                </Form.Field>
                 <div
                   style={{
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    maxHeight: '250px',
-                    overflowY: 'auto',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
                   }}
                 >
-                  {taskNotes.length === 0 ? (
-                    <div
+                  <div
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      minWidth: '200px',
+                    }}
+                  >
+                    <span
+                      style={{ fontSize: '11px', color: 'var(--text-low)', whiteSpace: 'nowrap' }}
+                    >
+                      Note Progress:
+                    </span>
+                    <input
+                      id="new-note-percent-range"
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={newNotePercent}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setNewNotePercent(val);
+                        if (val === 100) {
+                          setNewNoteStatus('done');
+                        } else if (newNoteStatus === 'done') {
+                          setNewNoteStatus('in_progress');
+                        }
+                      }}
+                      style={{ flex: 1, accentColor: 'var(--primary)' }}
+                    />
+                    <span
+                      style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-high)' }}
+                    >
+                      {newNotePercent}%
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-low)' }}>Status:</span>
+                    <select
+                      id="new-note-status-select"
+                      className="ui dropdown"
                       style={{
-                        textAlign: 'center',
-                        padding: '16px',
-                        color: 'var(--text-low)',
-                        fontSize: '13px',
+                        padding: '4px 8px',
+                        fontSize: '12px',
+                        background: 'rgba(15, 23, 42, 0.6)',
+                        color: 'var(--text-high)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '4px',
+                      }}
+                      value={newNoteStatus}
+                      onChange={(e) => {
+                        const s = e.target.value as 'todo' | 'in_progress' | 'done';
+                        setNewNoteStatus(s);
+                        if (s === 'done') {
+                          setNewNotePercent(100);
+                        } else if (s === 'todo') {
+                          setNewNotePercent(0);
+                        }
                       }}
                     >
-                      No progress logs recorded.
-                    </div>
-                  ) : (
-                    taskNotes.map((note) => (
-                      <div key={note.id} className="glass-panel" style={{ padding: '10px 12px' }}>
-                        {editingNoteId === note.id ? (
-                          /* Edit note inline mode */
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <input
-                              type="text"
-                              className="form-input"
-                              value={editNoteText}
-                              onChange={(e) => setEditNoteText(e.target.value)}
-                              required
-                            />
-                            <div
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                gap: '10px',
-                              }}
-                            >
-                              <div
-                                style={{
-                                  flex: 1,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                }}
-                              >
-                                <span style={{ fontSize: '11px', color: 'var(--text-low)' }}>
-                                  Progress:
-                                </span>
-                                <input
-                                  type="range"
-                                  min="0"
-                                  max="100"
-                                  value={editNotePercent}
-                                  onChange={(e) => {
-                                    const val = Number(e.target.value);
-                                    setEditNotePercent(val);
-                                    if (val === 100) {
-                                      setEditNoteStatus('done');
-                                    } else if (editNoteStatus === 'done') {
-                                      setEditNoteStatus('in_progress');
-                                    }
-                                  }}
-                                  style={{ flex: 1, accentColor: 'var(--primary)' }}
-                                />
-                                <span style={{ fontSize: '12px' }}>{editNotePercent}%</span>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <label
-                                  style={{ fontSize: '11px', color: 'var(--text-low)' }}
-                                  htmlFor={`edit-note-status-${note.id}`}
-                                >
-                                  Status:
-                                  <select
-                                    id={`edit-note-status-${note.id}`}
-                                    className="form-select"
-                                    style={{ padding: '2px 6px', fontSize: '12px' }}
-                                    value={editNoteStatus}
-                                    onChange={(e) => {
-                                      const s = e.target.value as 'todo' | 'in_progress' | 'done';
-                                      setEditNoteStatus(s);
-                                      if (s === 'done') {
-                                        setEditNotePercent(100);
-                                      } else if (s === 'todo') {
-                                        setEditNotePercent(0);
-                                      }
-                                    }}
-                                  >
-                                    <option value="todo">Todo</option>
-                                    <option value="in_progress">In Progress</option>
-                                    <option value="done">Done</option>
-                                  </select>
-                                </label>
-                              </div>
-                              <div style={{ display: 'flex', gap: '6px' }}>
-                                <button
-                                  type="button"
-                                  className="btn btn-primary"
-                                  style={{ padding: '4px 8px', fontSize: '11px' }}
-                                  onClick={() => handleSaveEditNote(note.id)}
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary"
-                                  style={{ padding: '4px 8px', fontSize: '11px' }}
-                                  onClick={() => setEditingNoteId(null)}
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          /* View note mode */
+                      <option value="todo">Todo</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="done">Done</option>
+                    </select>
+                  </div>
+                  <Button
+                    type="submit"
+                    primary
+                    size="tiny"
+                    style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '4px' }}
+                  >
+                    Log Note
+                  </Button>
+                </div>
+              </Form>
+
+              {/* Notes list */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  maxHeight: '250px',
+                  overflowY: 'auto',
+                }}
+              >
+                {taskNotes.length === 0 ? (
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      padding: '16px',
+                      color: 'var(--text-low)',
+                      fontSize: '13px',
+                    }}
+                  >
+                    No progress logs recorded.
+                  </div>
+                ) : (
+                  taskNotes.map((note) => (
+                    <Segment
+                      key={note.id}
+                      className="glass-panel"
+                      style={{
+                        padding: '10px 12px',
+                        background: 'rgba(30, 41, 59, 0.3)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '8px',
+                        margin: 0,
+                      }}
+                    >
+                      {editingNoteId === note.id ? (
+                        /* Edit note inline mode */
+                        <Form style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <Form.Input
+                            value={editNoteText}
+                            onChange={(e) => setEditNoteText(e.target.value)}
+                            required
+                            fluid
+                          />
                           <div
                             style={{
                               display: 'flex',
                               justifyContent: 'space-between',
-                              alignItems: 'flex-start',
+                              alignItems: 'center',
+                              gap: '10px',
+                              flexWrap: 'wrap',
                             }}
                           >
-                            <div style={{ flex: 1 }}>
-                              <div
-                                style={{
-                                  fontSize: '13px',
-                                  fontWeight: '500',
-                                  color: 'var(--text-high)',
+                            <div
+                              style={{
+                                flex: 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                minWidth: '180px',
+                              }}
+                            >
+                              <span style={{ fontSize: '11px', color: 'var(--text-low)' }}>
+                                Progress:
+                              </span>
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={editNotePercent}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setEditNotePercent(val);
+                                  if (val === 100) {
+                                    setEditNoteStatus('done');
+                                  } else if (editNoteStatus === 'done') {
+                                    setEditNoteStatus('in_progress');
+                                  }
                                 }}
-                              >
-                                {note.update_text}
-                              </div>
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  gap: '8px',
-                                  marginTop: '4px',
-                                  flexWrap: 'wrap',
-                                }}
-                              >
-                                <span
-                                  style={{
-                                    fontSize: '10px',
-                                    padding: '1px 5px',
-                                    background: 'rgba(255,255,255,0.04)',
-                                    borderRadius: '4px',
-                                    color: 'var(--text-med)',
-                                  }}
-                                >
-                                  📅 {note.date}
-                                </span>
-                                <span
-                                  style={{
-                                    fontSize: '10px',
-                                    padding: '1px 5px',
-                                    background: 'var(--primary-glow)',
-                                    borderRadius: '4px',
-                                    color: '#a5b4fc',
-                                  }}
-                                >
-                                  📈 {note.completion_percentage}%
-                                </span>
-                                <span
-                                  style={{
-                                    fontSize: '10px',
-                                    padding: '1px 5px',
-                                    background:
-                                      note.status === 'done'
-                                        ? 'var(--accent-glow)'
-                                        : 'rgba(255,255,255,0.06)',
-                                    borderRadius: '4px',
-                                    color:
-                                      note.status === 'done' ? 'var(--accent)' : 'var(--text-low)',
-                                  }}
-                                >
-                                  {statusLabels[note.status] || note.status}
-                                </span>
-                              </div>
+                                style={{ flex: 1, accentColor: 'var(--primary)' }}
+                              />
+                              <span style={{ fontSize: '12px', color: 'var(--text-high)' }}>
+                                {editNotePercent}%
+                              </span>
                             </div>
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              <button
-                                type="button"
-                                className="action-btn"
-                                onClick={() => handleStartEditNote(note)}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '11px', color: 'var(--text-low)' }}>
+                                Status:
+                              </span>
+                              <select
+                                id={`edit-note-status-${note.id}`}
+                                className="ui dropdown"
+                                style={{
+                                  padding: '2px 6px',
+                                  fontSize: '12px',
+                                  background: 'rgba(15, 23, 42, 0.6)',
+                                  color: 'var(--text-high)',
+                                  border: '1px solid var(--glass-border)',
+                                  borderRadius: '4px',
+                                }}
+                                value={editNoteStatus}
+                                onChange={(e) => {
+                                  const s = e.target.value as 'todo' | 'in_progress' | 'done';
+                                  setEditNoteStatus(s);
+                                  if (s === 'done') {
+                                    setEditNotePercent(100);
+                                  } else if (s === 'todo') {
+                                    setEditNotePercent(0);
+                                  }
+                                }}
                               >
-                                ✏️
-                              </button>
-                              <button
-                                type="button"
-                                className="action-btn delete"
-                                onClick={() => handleDeleteNote(note.id)}
+                                <option value="todo">Todo</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="done">Done</option>
+                              </select>
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <Button
+                                primary
+                                size="mini"
+                                onClick={() => handleSaveEditNote(note.id)}
+                                style={{ padding: '6px 10px' }}
                               >
-                                🗑️
-                              </button>
+                                Save
+                              </Button>
+                              <Button
+                                basic
+                                inverted
+                                size="mini"
+                                onClick={() => setEditingNoteId(null)}
+                                style={{ padding: '6px 10px' }}
+                              >
+                                Cancel
+                              </Button>
                             </div>
                           </div>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
+                        </Form>
+                      ) : (
+                        /* View note mode */
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                          }}
+                        >
+                          <div style={{ flex: 1 }}>
+                            <div
+                              style={{
+                                fontSize: '13px',
+                                fontWeight: '500',
+                                color: 'var(--text-high)',
+                              }}
+                            >
+                              {note.update_text}
+                            </div>
+                            <div
+                              style={{
+                                display: 'flex',
+                                gap: '8px',
+                                marginTop: '4px',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              <Label
+                                size="mini"
+                                color="grey"
+                                style={{
+                                  background: 'rgba(255, 255, 255, 0.04)',
+                                  color: 'var(--text-med)',
+                                  margin: 0,
+                                }}
+                              >
+                                📅 {note.date}
+                              </Label>
+                              <Label size="mini" color="blue" style={{ margin: 0 }}>
+                                📈 {note.completion_percentage}%
+                              </Label>
+                              <Label
+                                size="mini"
+                                color={note.status === 'done' ? 'green' : 'grey'}
+                                style={{ margin: 0 }}
+                              >
+                                {statusLabels[note.status] || note.status}
+                              </Label>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <Button
+                              icon="edit"
+                              size="mini"
+                              basic
+                              inverted
+                              onClick={() => handleStartEditNote(note)}
+                              style={{ padding: '4px', margin: 0, color: 'var(--text-low)' }}
+                            />
+                            <Button
+                              icon="trash"
+                              size="mini"
+                              basic
+                              negative
+                              onClick={() => handleDeleteNote(note.id)}
+                              style={{ padding: '4px', margin: 0 }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </Segment>
+                  ))
+                )}
               </div>
-            )}
-          </div>
-        </div>
-      )}
+            </div>
+          )}
+        </Modal.Content>
+      </Modal>
+
+      {/* CUSTOM TASK DELETE CONFIRMATION MODAL */}
+      <Modal
+        open={taskToDeleteId !== null}
+        onClose={() => setTaskToDeleteId(null)}
+        size="mini"
+        style={{
+          background: 'var(--glass-bg)',
+          border: '1px solid var(--glass-border)',
+          color: 'var(--text-high)',
+        }}
+      >
+        <Modal.Header
+          style={{
+            background: 'transparent',
+            color: 'var(--text-high)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          Delete Task
+        </Modal.Header>
+        <Modal.Content style={{ background: 'transparent', color: 'var(--text-high)' }}>
+          <p style={{ fontSize: '14px', color: 'var(--text-high)', lineHeight: '1.5', margin: 0 }}>
+            Move
+            {taskToDelete ? (
+              <>
+                {' '}
+                <strong>{taskToDelete.title}</strong>
+              </>
+            ) : (
+              ' this task'
+            )}{' '}
+            to the Trash?
+          </p>
+        </Modal.Content>
+        <Modal.Actions
+          style={{
+            background: 'transparent',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            display: 'flex',
+            gap: '8px',
+            justifyContent: 'flex-end',
+            padding: '12px',
+          }}
+        >
+          <Button basic inverted onClick={() => setTaskToDeleteId(null)} style={{ margin: 0 }}>
+            Cancel
+          </Button>
+          <Button negative onClick={handleConfirmDeleteTask} style={{ margin: 0 }}>
+            Delete
+          </Button>
+        </Modal.Actions>
+      </Modal>
 
       {/* CUSTOM PROJECT DELETE CONFIRMATION MODAL */}
-      {projectToDeleteId !== null && (
-        <div className="modal-overlay">
-          <div className="modal-content glass-panel" style={{ maxWidth: '440px' }}>
-            <h3 className="modal-header">Delete Project</h3>
-            <p
-              style={{
-                fontSize: '14px',
-                color: 'var(--text-high)',
-                margin: '8px 0 16px 0',
-                lineHeight: '1.5',
-              }}
-            >
-              Do you want to delete all tasks and updates in this project?
-              <br />
-              <span style={{ fontSize: '13px', color: 'var(--text-med)' }}>
-                (If No, tasks will remain active as Ad-hoc tasks)
-              </span>
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ background: 'var(--danger)', color: '#fff' }}
-                onClick={() => handleConfirmDeleteProject(true)}
-              >
-                💥 Yes, Delete Project and All Tasks
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => handleConfirmDeleteProject(false)}
-              >
-                📦 No, Keep Tasks as Ad-hoc
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ marginTop: '8px' }}
-                onClick={() => setProjectToDeleteId(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={projectToDeleteId !== null}
+        onClose={() => setProjectToDeleteId(null)}
+        size="mini"
+        style={{
+          background: 'var(--glass-bg)',
+          border: '1px solid var(--glass-border)',
+          color: 'var(--text-high)',
+        }}
+      >
+        <Modal.Header
+          style={{
+            background: 'transparent',
+            color: 'var(--text-high)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          Delete Project
+        </Modal.Header>
+        <Modal.Content style={{ background: 'transparent', color: 'var(--text-high)' }}>
+          <p style={{ fontSize: '14px', color: 'var(--text-high)', lineHeight: '1.5', margin: 0 }}>
+            Do you want to delete all tasks and updates in this project?
+            <br />
+            <span style={{ fontSize: '13px', color: 'var(--text-med)' }}>
+              (If No, tasks will remain active as Ad-hoc tasks)
+            </span>
+          </p>
+        </Modal.Content>
+        <Modal.Actions
+          style={{
+            background: 'transparent',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            padding: '12px',
+          }}
+        >
+          <Button
+            negative
+            fluid
+            onClick={() => handleConfirmDeleteProject(true)}
+            style={{ margin: 0 }}
+          >
+            💥 Yes, Delete Project and Tasks
+          </Button>
+          <Button
+            primary
+            fluid
+            onClick={() => handleConfirmDeleteProject(false)}
+            style={{ margin: 0 }}
+          >
+            📦 No, Keep Tasks as Ad-hoc
+          </Button>
+          <Button
+            basic
+            inverted
+            fluid
+            onClick={() => setProjectToDeleteId(null)}
+            style={{ margin: 0 }}
+          >
+            Cancel
+          </Button>
+        </Modal.Actions>
+      </Modal>
 
       {/* ARCHIVED PROJECTS MODAL */}
-      {showArchivedModal && (
-        <div className="modal-overlay">
+      <Modal
+        open={showArchivedModal}
+        onClose={() => setShowArchivedModal(false)}
+        size="small"
+        style={{
+          background: 'var(--glass-bg)',
+          border: '1px solid var(--glass-border)',
+          color: 'var(--text-high)',
+        }}
+      >
+        <Modal.Header
+          as="h3"
+          style={{
+            background: 'transparent',
+            color: 'var(--text-high)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          📁 Archived Projects
+        </Modal.Header>
+        <Modal.Content scrolling style={{ background: 'transparent', color: 'var(--text-high)' }}>
           <div
-            className="modal-content glass-panel"
             style={{
-              maxWidth: '560px',
-              maxHeight: '80vh',
-              overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
+              gap: '10px',
+              margin: '12px 0',
             }}
           >
-            <h3 className="modal-header">📁 Archived Projects</h3>
-            <div
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-                margin: '12px 0',
-              }}
-            >
-              {archivedProjects.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-low)' }}>
-                  No archived projects.
-                </div>
-              ) : (
-                archivedProjects.map((p) => (
-                  <div
-                    key={p.id}
-                    className="glass-panel"
-                    style={{
-                      padding: '12px 16px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <div>
-                      <div
-                        style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-high)' }}
-                      >
-                        {p.name}
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-low)', marginTop: '2px' }}>
-                        Priority: {getPriorityLabel(p.priority).text} | Created:{' '}
-                        {new Date(p.created_at).toLocaleDateString()}
-                      </div>
+            {archivedProjects.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-low)' }}>
+                No archived projects.
+              </div>
+            ) : (
+              archivedProjects.map((p) => (
+                <Segment
+                  key={p.id}
+                  className="glass-panel"
+                  style={{
+                    padding: '12px 16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: 'rgba(30, 41, 59, 0.3)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: '8px',
+                    margin: 0,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-high)' }}>
+                      {p.name}
                     </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ padding: '4px 10px', fontSize: '12px' }}
-                        onClick={() => handleUnarchiveProject(p.id)}
-                      >
-                        Restore Project
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{
-                          padding: '4px 10px',
-                          fontSize: '12px',
-                          borderColor: 'rgba(239,68,68,0.2)',
-                          color: '#ef4444',
-                        }}
-                        onClick={() => handleDeleteArchivedProject(p.id)}
-                      >
-                        Delete
-                      </button>
+                    <div style={{ fontSize: '11px', color: 'var(--text-low)', marginTop: '2px' }}>
+                      Priority: {getPriorityLabel(p.priority).text} | Created:{' '}
+                      {new Date(p.created_at).toLocaleDateString()}
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                borderTop: '1px solid var(--panel-border)',
-                paddingTop: '12px',
-              }}
-            >
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setShowArchivedModal(false)}
-              >
-                Close
-              </button>
-            </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button size="tiny" onClick={() => handleUnarchiveProject(p.id)}>
+                      Restore Project
+                    </Button>
+                    <Button
+                      size="tiny"
+                      color="red"
+                      basic
+                      onClick={() => handleDeleteArchivedProject(p.id)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </Segment>
+              ))
+            )}
           </div>
-        </div>
-      )}
+        </Modal.Content>
+        <Modal.Actions
+          style={{ background: 'transparent', borderTop: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <Button basic color="grey" onClick={() => setShowArchivedModal(false)}>
+            Close
+          </Button>
+        </Modal.Actions>
+      </Modal>
 
       {/* TRASH MODAL */}
-      {showTrashModal && (
-        <div className="modal-overlay">
+      <Modal
+        open={showTrashModal}
+        onClose={() => setShowTrashModal(false)}
+        size="small"
+        style={{
+          background: 'var(--glass-bg)',
+          border: '1px solid var(--glass-border)',
+          color: 'var(--text-high)',
+        }}
+      >
+        <Modal.Header
+          as="h3"
+          style={{
+            background: 'transparent',
+            color: 'var(--text-high)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span>🗑️ Trash Bin</span>
+          <span style={{ fontSize: '11px', color: 'var(--text-low)', fontWeight: 'normal' }}>
+            Retention: {trashRetentionDays} days
+          </span>
+        </Modal.Header>
+        <Modal.Content scrolling style={{ background: 'transparent', color: 'var(--text-high)' }}>
           <div
-            className="modal-content glass-panel"
             style={{
-              maxWidth: '640px',
-              maxHeight: '80vh',
-              overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
+              gap: '20px',
+              margin: '12px 0',
             }}
           >
-            <h3
-              className="modal-header"
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-            >
-              <span>🗑️ Trash Bin</span>
-              <span style={{ fontSize: '11px', color: 'var(--text-low)', fontWeight: 'normal' }}>
-                Retention: {trashRetentionDays} days
-              </span>
-            </h3>
-
-            <div
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px',
-                margin: '12px 0',
-              }}
-            >
-              {/* Deleted Projects Section */}
-              <div>
-                <h4
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    color: 'var(--primary)',
-                    borderBottom: '1px solid rgba(255,255,255,0.05)',
-                    paddingBottom: '4px',
-                    marginBottom: '8px',
-                  }}
-                >
-                  Projects ({trashItems?.projects.length || 0})
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {!trashItems || trashItems.projects.length === 0 ? (
-                    <div
+            {/* Deleted Projects Section */}
+            <div>
+              <h4
+                style={{
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: 'var(--primary)',
+                  borderBottom: '1px solid rgba(255,255,255,0.05)',
+                  paddingBottom: '4px',
+                  marginBottom: '8px',
+                  margin: 0,
+                }}
+              >
+                Projects ({trashItems?.projects.length || 0})
+              </h4>
+              <div
+                style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}
+              >
+                {!trashItems || trashItems.projects.length === 0 ? (
+                  <div
+                    style={{
+                      padding: '12px',
+                      textAlign: 'center',
+                      color: 'var(--text-low)',
+                      fontSize: '13px',
+                    }}
+                  >
+                    No deleted projects.
+                  </div>
+                ) : (
+                  trashItems.projects.map((p) => (
+                    <Segment
+                      key={p.id}
+                      className="glass-panel"
                       style={{
-                        padding: '12px',
-                        textAlign: 'center',
-                        color: 'var(--text-low)',
-                        fontSize: '13px',
+                        padding: '10px 12px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        background: 'rgba(30, 41, 59, 0.3)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '8px',
+                        margin: 0,
                       }}
                     >
-                      No deleted projects.
-                    </div>
-                  ) : (
-                    trashItems.projects.map((p) => (
-                      <div
-                        key={p.id}
-                        className="glass-panel"
-                        style={{
-                          padding: '10px 12px',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: '500', fontSize: '13px' }}>{p.name}</div>
-                          <div
-                            style={{
-                              display: 'flex',
-                              gap: '8px',
-                              marginTop: '2px',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <span style={{ fontSize: '10px', color: 'var(--text-low)' }}>
-                              Deleted: {new Date(p.deleted_at).toLocaleDateString()}
-                            </span>
-                            {renderDaysRemaining(p.deleted_at)}
-                          </div>
+                      <div>
+                        <div
+                          style={{ fontWeight: '500', fontSize: '13px', color: 'var(--text-high)' }}
+                        >
+                          {p.name}
                         </div>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            style={{ padding: '3px 8px', fontSize: '11px' }}
-                            onClick={() => handleRestoreProject(p.id)}
-                          >
-                            Restore
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            style={{
-                              padding: '3px 8px',
-                              fontSize: '11px',
-                              color: '#ef4444',
-                              borderColor: 'rgba(239,68,68,0.2)',
-                            }}
-                            onClick={() => handlePurgeProject(p.id)}
-                          >
-                            Purge
-                          </button>
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: '8px',
+                            marginTop: '2px',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <span style={{ fontSize: '10px', color: 'var(--text-low)' }}>
+                            Deleted: {new Date(p.deleted_at).toLocaleDateString()}
+                          </span>
+                          {renderDaysRemaining(p.deleted_at)}
                         </div>
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Deleted Tasks Section */}
-              <div>
-                <h4
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    color: 'var(--primary)',
-                    borderBottom: '1px solid rgba(255,255,255,0.05)',
-                    paddingBottom: '4px',
-                    marginBottom: '8px',
-                  }}
-                >
-                  Tasks ({trashItems?.tasks.length || 0})
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {!trashItems || trashItems.tasks.length === 0 ? (
-                    <div
-                      style={{
-                        padding: '12px',
-                        textAlign: 'center',
-                        color: 'var(--text-low)',
-                        fontSize: '13px',
-                      }}
-                    >
-                      No deleted tasks.
-                    </div>
-                  ) : (
-                    trashItems.tasks.map((t) => (
-                      <div
-                        key={t.id}
-                        className="glass-panel"
-                        style={{
-                          padding: '10px 12px',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: '500', fontSize: '13px' }}>{t.title}</div>
-                          <div
-                            style={{
-                              display: 'flex',
-                              gap: '8px',
-                              marginTop: '2px',
-                              alignItems: 'center',
-                            }}
-                          >
-                            {t.project_name && (
-                              <span
-                                style={{
-                                  fontSize: '10px',
-                                  color: 'var(--text-low)',
-                                  background: 'rgba(255,255,255,0.04)',
-                                  padding: '1px 4px',
-                                  borderRadius: '3px',
-                                }}
-                              >
-                                Project: {t.project_name}
-                              </span>
-                            )}
-                            <span style={{ fontSize: '10px', color: 'var(--text-low)' }}>
-                              Deleted: {new Date(t.deleted_at).toLocaleDateString()}
-                            </span>
-                            {renderDaysRemaining(t.deleted_at)}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            style={{ padding: '3px 8px', fontSize: '11px' }}
-                            onClick={() => handleRestoreTask(t.id)}
-                          >
-                            Restore
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            style={{
-                              padding: '3px 8px',
-                              fontSize: '11px',
-                              color: '#ef4444',
-                              borderColor: 'rgba(239,68,68,0.2)',
-                            }}
-                            onClick={() => handlePurgeTask(t.id)}
-                          >
-                            Purge
-                          </button>
-                        </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <Button
+                          size="mini"
+                          onClick={() => handleRestoreProject(p.id)}
+                          style={{ padding: '6px 10px' }}
+                        >
+                          Restore
+                        </Button>
+                        <Button
+                          size="mini"
+                          color="red"
+                          basic
+                          onClick={() => handlePurgeProject(p.id)}
+                          style={{ padding: '6px 10px' }}
+                        >
+                          Purge
+                        </Button>
                       </div>
-                    ))
-                  )}
-                </div>
+                    </Segment>
+                  ))
+                )}
               </div>
             </div>
 
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                borderTop: '1px solid var(--panel-border)',
-                paddingTop: '12px',
-              }}
-            >
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setShowTrashModal(false)}
+            {/* Deleted Tasks Section */}
+            <div>
+              <h4
+                style={{
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: 'var(--primary)',
+                  borderBottom: '1px solid rgba(255,255,255,0.05)',
+                  paddingBottom: '4px',
+                  marginBottom: '8px',
+                  margin: 0,
+                }}
               >
-                Close
-              </button>
+                Tasks ({trashItems?.tasks.length || 0})
+              </h4>
+              <div
+                style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}
+              >
+                {!trashItems || trashItems.tasks.length === 0 ? (
+                  <div
+                    style={{
+                      padding: '12px',
+                      textAlign: 'center',
+                      color: 'var(--text-low)',
+                      fontSize: '13px',
+                    }}
+                  >
+                    No deleted tasks.
+                  </div>
+                ) : (
+                  trashItems.tasks.map((t) => (
+                    <Segment
+                      key={t.id}
+                      className="glass-panel"
+                      style={{
+                        padding: '10px 12px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        background: 'rgba(30, 41, 59, 0.3)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '8px',
+                        margin: 0,
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{ fontWeight: '500', fontSize: '13px', color: 'var(--text-high)' }}
+                        >
+                          {t.title}
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: '8px',
+                            marginTop: '2px',
+                            alignItems: 'center',
+                          }}
+                        >
+                          {t.project_name && (
+                            <Label
+                              size="mini"
+                              style={{
+                                fontSize: '10px',
+                                color: 'var(--text-low)',
+                                background: 'rgba(255,255,255,0.04)',
+                                padding: '2px 4px',
+                                borderRadius: '3px',
+                                margin: 0,
+                              }}
+                            >
+                              Project: {t.project_name}
+                            </Label>
+                          )}
+                          <span style={{ fontSize: '10px', color: 'var(--text-low)' }}>
+                            Deleted: {new Date(t.deleted_at).toLocaleDateString()}
+                          </span>
+                          {renderDaysRemaining(t.deleted_at)}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <Button
+                          size="mini"
+                          onClick={() => handleRestoreTask(t.id)}
+                          style={{ padding: '6px 10px' }}
+                        >
+                          Restore
+                        </Button>
+                        <Button
+                          size="mini"
+                          color="red"
+                          basic
+                          onClick={() => handlePurgeTask(t.id)}
+                          style={{ padding: '6px 10px' }}
+                        >
+                          Purge
+                        </Button>
+                      </div>
+                    </Segment>
+                  ))
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        </Modal.Content>
+        <Modal.Actions
+          style={{ background: 'transparent', borderTop: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <Button basic color="grey" onClick={() => setShowTrashModal(false)}>
+            Close
+          </Button>
+        </Modal.Actions>
+      </Modal>
     </div>
   );
 };
